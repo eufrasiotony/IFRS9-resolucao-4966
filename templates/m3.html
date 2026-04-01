@@ -1,0 +1,502 @@
+{% extends "base.html" %}
+{% block title %}Módulo 3 — Modelo de PD{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="module-badge"><i class="fas fa-chart-line"></i> Módulo 3 de 8</div>
+  <h1>Modelo de PD — Probability of Default</h1>
+  <p class="page-desc">Como estimar a probabilidade de default com Regressão Logística e Gradient Boosting. AUC, Gini e KS.</p>
+</div>
+
+<div class="page-body">
+  <!-- ── Objetivos de Aprendizagem ────────────────────────── -->
+  <div class="objectives-block">
+    <div class="objectives-header"><i class="fas fa-bullseye"></i> Objetivos de Aprendizagem</div>
+    <div class="objectives-body">
+      <ul>
+        <li>Construir modelos de PD com Regressão Logística e Gradient Boosting</li>
+        <li>Interpretar as métricas AUC, Gini e KS como medidas de discriminação</li>
+        <li>Entender a diferença entre PD Point-in-Time (PIT) e Through-the-Cycle (TTC)</li>
+        <li>Conhecer WoE, Information Value e a construção de um ScoreCard</li>
+        <li>Calcular PD marginal, cumulativa e lifetime para os Stages 2 e 3</li>
+        <li>Aplicar backtesting com PSI, Hosmer-Lemeshow e Brier Score</li>
+      </ul>
+    </div>
+  </div>
+  <!-- ── Metrics ─────────────────────────────────────────── -->
+  {% set m = data.metrics.pd %}
+  <div class="row g-3 mb-4">
+    {% for model, color, cls in [('logistic','#3b82f6','kpi-accent'),('gbm','#8b5cf6','kpi-accent')] %}
+    {% set mm = m[model] %}
+    <div class="col-md-6">
+      <div class="kpi-card {{ cls }}" style="border-top-color:{{ color }};">
+        <div class="kpi-label"><i class="fas fa-robot me-1"></i>{{ model.upper() }}</div>
+        <div class="row g-0 mt-1">
+          <div class="col-4 text-center">
+            <div style="font-size:1.4rem;font-weight:800;color:{{ color }};">{{ "%.3f"|format(mm.auc) }}</div>
+            <div class="kpi-sub">AUC</div>
+          </div>
+          <div class="col-4 text-center" style="border-left:1px solid var(--border);border-right:1px solid var(--border);">
+            <div style="font-size:1.4rem;font-weight:800;color:{{ color }};">{{ "%.3f"|format(mm.gini) }}</div>
+            <div class="kpi-sub">Gini</div>
+          </div>
+          <div class="col-4 text-center">
+            <div style="font-size:1.4rem;font-weight:800;color:{{ color }};">{{ "%.3f"|format(mm.ks) }}</div>
+            <div class="kpi-sub">KS</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- ── 0. Para quem está começando ─────────────────────── -->
+  <div class="beginner-block mb-4">
+    <div class="beginner-header">
+      <i class="fas fa-graduation-cap me-2"></i>Para quem está começando — Entendendo o modelo de PD
+    </div>
+    <div class="beginner-body">
+      <p>Imagine que um banco vai emprestar dinheiro para <strong>100 pessoas</strong> ao mesmo tempo. Por experiência histórica, o banco sabe que algumas dessas pessoas vão acabar não pagando. Mas quais? É aqui que entra o modelo de PD:</p>
+      <div class="beginner-highlight">
+        <i class="fas fa-lightbulb me-2" style="color:#3b82f6;"></i>
+        "Dado o perfil <em>deste</em> cliente — renda, histórico de pagamento, dívidas — qual a <strong>chance</strong> de ele não pagar nos próximos 12 meses?"
+      </div>
+      <p>Se o modelo retorna <strong>PD = 5%</strong>, a interpretação é: em cada 100 clientes com esse perfil, aproximadamente 5 devem entrar em default. É uma probabilidade genuína — exatamente como a previsão do tempo que diz "30% de chance de chuva".</p>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="beginner-output-box">
+            <div class="output-label output-label-prob">✅ Tipo de saída do modelo de PD</div>
+            <strong>Probabilidade</strong> — valor entre 0% e 100%<br><br>
+            <span>0,1% → perfil excelente (sem dívidas, renda estável)</span><br>
+            <span>5% → risco baixo → costuma ser Stage 1</span><br>
+            <span>25% → risco elevado → tende para Stage 2</span><br>
+            <span>80%+ → quase certo de default → Stage 3</span>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="beginner-output-box">
+            <div class="output-label output-label-prob">Como o banco usa a PD</div>
+            <strong>Provisão (ECL):</strong> PD entra diretamente em ECL = PD × LGD × EAD<br>
+            <strong>Staging IFRS 9:</strong> se a PD subiu muito desde a originação → Stage 2<br>
+            <strong>Precificação:</strong> cliente de alto risco paga juros maiores<br>
+            <strong>Limite:</strong> score baixo → limite de crédito menor
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 1. O que é PD? ──────────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-chart-line"></i></span> O que é a Probability of Default?</h2>
+    <p>
+      A <strong>PD (Probability of Default)</strong> é a probabilidade de um devedor deixar de honrar suas obrigações financeiras dentro de um horizonte definido.
+    </p>
+    <div class="formula-box">
+      $$\text{PD}_{12m} = P(\text{default} \mid t \leq 12 \text{ meses})$$
+
+      $$\text{PD}_{lifetime}(T) = 1 - (1 - \text{PD}_{anual})^T \quad \text{onde } T = \frac{\text{meses restantes}}{12}$$
+    </div>
+    <div class="row g-3 mt-1">
+      <div class="col-md-6">
+        <div style="background:#eff6ff;border-radius:8px;padding:1rem;">
+          <p style="font-size:.83rem;margin:0;"><strong style="color:#1d4ed8;">PD 12 meses (Stage 1):</strong><br>
+          Probabilidade de default nos próximos 12 meses. Usada para contratos sem ASRC.</p>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div style="background:#faf5ff;border-radius:8px;padding:1rem;">
+          <p style="font-size:.83rem;margin:0;"><strong style="color:#7c3aed;">PD Lifetime (Stage 2 e 3):</strong><br>
+          Probabilidade acumulada ao longo de toda a vida remanescente do contrato.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2. PIT vs TTC ───────────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-clock"></i></span> Point-in-Time vs Through-the-Cycle</h2>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <h3>Point-in-Time (PIT)</h3>
+        <p style="font-size:.85rem;color:var(--text-2);">
+          Reflete <em>condições econômicas atuais e prospectivas</em>. A PD sobe em recessão e cai em expansão.
+          É o que o IFRS 9 exige — incorpora forward-looking.
+        </p>
+        <div class="callout callout-success" style="font-size:.8rem;">
+          <strong>IFRS 9 requer PIT</strong>
+          Estimativas devem refletir cenários macro correntes e projetados.
+        </div>
+      </div>
+      <div class="col-md-6">
+        <h3>Through-the-Cycle (TTC)</h3>
+        <p style="font-size:.85rem;color:var(--text-2);">
+          Representa a PD <em>média ao longo do ciclo econômico</em>. Mais estável entre recessão e expansão.
+          Usada em Basileia para capital regulatório (IRB).
+        </p>
+        <div class="callout callout-warn" style="font-size:.8rem;">
+          <strong>Atenção:</strong> Usar TTC puro no IFRS 9 não está em conformidade com o padrão.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 3. Metodologia ──────────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-cogs"></i></span> Metodologia</h2>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <h3>1. Regressão Logística</h3>
+        <p style="font-size:.84rem;color:var(--text-2);">
+          Modelo simples, interpretável e regulatoriamente aceito. Usa a função sigmoide para converter o score em probabilidade.
+        </p>
+        <div class="formula-box" style="font-size:.78rem;">
+          logit(PD) = β₀ + β₁·score + β₂·DTI + β₃·DPD + ...
+          PD = 1 / (1 + e^{−logit})
+        </div>
+      </div>
+      <div class="col-md-6">
+        <h3>2. Gradient Boosting (GBM)</h3>
+        <p style="font-size:.84rem;color:var(--text-2);">
+          Ensemble de árvores de decisão. Captura não-linearidades e interações entre variáveis.
+        </p>
+        <div class="code-block">
+<span class="kw">from</span> sklearn.ensemble <span class="kw">import</span> GradientBoostingClassifier
+
+estimator = GradientBoostingClassifier(
+    n_estimators=<span class="nm">300</span>,
+    learning_rate=<span class="nm">0.05</span>,
+    max_depth=<span class="nm">4</span>,
+    subsample=<span class="nm">0.8</span>,
+    min_samples_leaf=<span class="nm">20</span>,
+)
+        </div>
+      </div>
+    </div>
+
+    <h3 class="mt-3">Pipeline sklearn</h3>
+    <div class="code-block">
+<span class="cm"># src/pd_model.py</span>
+preprocessor = ColumnTransformer([
+    (<span class="st">"num"</span>, StandardScaler(), NUMERIC_FEATURES),
+    (<span class="st">"cat"</span>, OneHotEncoder(handle_unknown=<span class="st">"ignore"</span>), CATEGORICAL_FEATURES),
+])
+
+pipe = Pipeline([
+    (<span class="st">"preprocessor"</span>, preprocessor),
+    (<span class="st">"model"</span>, estimator),  <span class="cm"># LogisticRegression ou GBM</span>
+])
+pipe.fit(X_train, y_train)
+pd_scores = pipe.predict_proba(X)[:, <span class="nm">1</span>]
+    </div>
+  </div>
+
+  <!-- ── 4. Métricas ─────────────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-ruler"></i></span> Métricas de Avaliação</h2>
+    <div class="table-responsive">
+      <table class="table-custom">
+        <thead><tr><th>Métrica</th><th>Fórmula</th><th>Logistic</th><th>GBM</th><th>Benchmark</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="fw-600">AUC-ROC</td>
+            <td style="font-size:.8rem;">Área sob a curva ROC</td>
+            <td class="{{ 'metric-good' if m.logistic.auc >= 0.75 else 'metric-warn' }}">{{ "%.4f"|format(m.logistic.auc) }}</td>
+            <td class="{{ 'metric-good' if m.gbm.auc >= 0.75 else 'metric-warn' }}">{{ "%.4f"|format(m.gbm.auc) }}</td>
+            <td style="font-size:.8rem;color:var(--text-2);">≥ 0.70 aceitável</td>
+          </tr>
+          <tr>
+            <td class="fw-600">Gini</td>
+            <td style="font-size:.8rem;">2 × AUC − 1</td>
+            <td class="{{ 'metric-good' if m.logistic.gini >= 0.40 else 'metric-warn' }}">{{ "%.4f"|format(m.logistic.gini) }}</td>
+            <td class="{{ 'metric-good' if m.gbm.gini >= 0.40 else 'metric-warn' }}">{{ "%.4f"|format(m.gbm.gini) }}</td>
+            <td style="font-size:.8rem;color:var(--text-2);">≥ 0.40 bom</td>
+          </tr>
+          <tr>
+            <td class="fw-600">KS</td>
+            <td style="font-size:.8rem;">max(TPR − FPR)</td>
+            <td class="{{ 'metric-good' if m.logistic.ks >= 0.30 else 'metric-warn' }}">{{ "%.4f"|format(m.logistic.ks) }}</td>
+            <td class="{{ 'metric-good' if m.gbm.ks >= 0.30 else 'metric-warn' }}">{{ "%.4f"|format(m.gbm.ks) }}</td>
+            <td style="font-size:.8rem;color:var(--text-2);">≥ 0.30 aceitável</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="row g-3 mt-2" style="font-size:.83rem;">
+      <div class="col-md-4">
+        <div class="callout callout-info">
+          <strong>AUC-ROC</strong> mede a capacidade de separar bons e maus pagadores.
+          AUC = 0.5 é aleatório; AUC = 1.0 é perfeito.
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="callout callout-success">
+          <strong>Gini = 2×AUC−1.</strong> Mais intuitivo: 0% = aleatório, 100% = perfeito.
+          Usado amplamente em crédito.
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="callout callout-warn">
+          <strong>KS (Kolmogorov-Smirnov)</strong> é a máxima separação entre as distribuições cumulativas de bons e maus.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 5. Charts ────────────────────────────────────────── -->
+  <div class="row g-4 mb-2">
+    <div class="col-md-6">
+      <div class="chart-container">
+        <div class="chart-title"><i class="fas fa-image me-2"></i>Curva ROC e Distribuição de Scores</div>
+        <img src="/plots/03_pd_performance.png" class="chart-img" alt="PD Performance" onerror="this.style.display='none'">
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="chart-container">
+        <div class="chart-title"><i class="fas fa-image me-2"></i>Curva KS</div>
+        <img src="/plots/04_ks_curve.png" class="chart-img" alt="KS Curve" onerror="this.style.display='none'">
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="chart-container">
+        <div class="chart-title"><i class="fas fa-image me-2"></i>Calibração do Modelo</div>
+        <img src="/plots/05_pd_calibration.png" class="chart-img" alt="Calibration" onerror="this.style.display='none'">
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="chart-container">
+        <div class="chart-title"><i class="fas fa-image me-2"></i>Feature Importance (GBM)</div>
+        <img src="/plots/10_feature_importance.png" class="chart-img" alt="Feature Importance" onerror="this.style.display='none'">
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 6. WoE / IV e ScoreCard ──────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-id-card"></i></span> ScoreCard: WoE e Information Value</h2>
+    <p>
+      Antes dos modelos ML, a abordagem padrão para PD era o <strong>ScoreCard logístico</strong>,
+      baseado em <em>Weight of Evidence (WoE)</em> e <em>Information Value (IV)</em>.
+      Mesmo com GBMs, o WoE ainda é amplamente usado na seleção e binagem de variáveis.
+    </p>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <div class="formula-box">
+          $$WoE_i = \ln\left(\frac{\% \text{Bons}_i}{\% \text{Maus}_i}\right)$$
+
+          $$IV = \sum_i (\% \text{Bons}_i - \% \text{Maus}_i) \times WoE_i$$
+        </div>
+        <table class="table-custom mt-3" style="font-size:.8rem;">
+          <thead><tr><th>IV</th><th>Poder Preditivo</th></tr></thead>
+          <tbody>
+            <tr><td>&lt; 0.02</td><td class="text-muted">Inútil</td></tr>
+            <tr><td>0.02 – 0.10</td><td class="metric-warn">Fraco</td></tr>
+            <tr><td>0.10 – 0.30</td><td class="metric-good">Médio</td></tr>
+            <tr><td>0.30 – 0.50</td><td class="metric-good">Forte</td></tr>
+            <tr><td>&gt; 0.50</td><td class="metric-good">Muito forte (suspeito)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="col-md-6">
+        <h3>ScoreCard: pontos por faixa</h3>
+        <p style="font-size:.84rem;color:var(--text-2);">
+          As variáveis são binadas (ex.: score ≤ 500, 501–600, 601–700, 700+).
+          Cada bin recebe um <strong>WoE</strong> que entra no logit. O coeficiente × WoE
+          é convertido em "pontos" numa escala de 300–850.
+        </p>
+        <div class="code-block" style="font-size:.74rem;">
+<span class="cm"># Faixa de Score → WoE → Pontos</span>
+<span class="cm"># score ≤ 500:   WoE = -1.62 → +8  pts (alto risco)</span>
+<span class="cm"># 501–600:       WoE = -0.45 → +22 pts</span>
+<span class="cm"># 601–700:       WoE =  0.38 → +34 pts</span>
+<span class="cm"># 701–800:       WoE =  1.12 → +44 pts</span>
+<span class="cm"># > 800:         WoE =  1.89 → +53 pts (baixo risco)</span>
+points = offset + factor * np.log(odds)
+<span class="cm"># donde: factor = pdo / ln(2)</span>
+<span class="cm">#        pdo = "points to double the odds"</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 7. PD Marginal vs Cumulativa ────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-timeline"></i></span> PD Marginal × PD Cumulativa × PD Lifetime</h2>
+    <p>
+      Para o ECL de Estágio 2 e Estágio 3, o IFRS 9 exige a PD ao longo de toda a vida do contrato
+      (<em>lifetime PD</em>). Há três formas de expressá-la:
+    </p>
+    <div class="formula-box">
+      $$\text{PD}_{marginal}(t) = P(\text{default no período } t \mid \text{sobreviveu até } t-1)$$
+
+      $$\text{PD}_{cumulativa}(T) = 1 - \prod_{t=1}^{T}\bigl(1 - \text{PD}_{marginal}(t)\bigr)$$
+
+      <span style="font-size:.8rem;">Aproximação simples (PD constante anual):</span>
+      $$\text{PD}_{lifetime} \approx 1 - (1 - \text{PD}_{12m})^{T_{anos}}$$
+    </div>
+    <div class="row g-3 mt-1">
+      <div class="col-md-4">
+        <div class="callout callout-info" style="font-size:.8rem;">
+          <strong>Hazard Rate (λ)</strong><br>
+          Na análise de sobrevivência, λ(t) é a taxa de saída (default) condicional em sobreviver até t.
+          $PD_{marginal}(t) = 1 - e^{-\lambda(t)}$
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="callout callout-success" style="font-size:.8rem;">
+          <strong>Stage 1 (12m)</strong><br>
+          Usa apenas PD₁₂ₘ. O ECL é calculado olhando somente os próximos 12 meses.
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="callout callout-warn" style="font-size:.8rem;">
+          <strong>Stage 2 &amp; 3 (lifetime)</strong><br>
+          Usa PD cumulativa até o vencimento do contrato. Podemos ter contratos com 15–30 anos.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 8. Forward-Looking: Satellite Model ─────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-globe"></i></span> Ajuste Forward-Looking: Modelo Satélite</h2>
+    <p>
+      O IFRS 9 exige que as estimativas de PD incorporem <strong>informações prospectivas</strong> (forward-looking).
+      A abordagem padrão de mercado é o <em>modelo satélite</em>: relaciona a PD média da carteira
+      com variáveis macroeconômicas.
+    </p>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <div class="formula-box" style="font-size:.8rem;">
+          $$\ln\left(\frac{DR_t}{1 - DR_t}\right) = \alpha + \beta_1 \cdot PIB_t + \beta_2 \cdot \text{Desemprego}_t + \beta_3 \cdot \text{SELIC}_t + \varepsilon_t$$
+
+          <span>DR = Default Rate observada (série histórica)</span>
+        </div>
+        <div class="code-block mt-2" style="font-size:.74rem;">
+<span class="cm"># Satellite model simplificado</span>
+<span class="kw">from</span> statsmodels.api <span class="kw">import</span> OLS
+logit_dr = logit(default_rate_series)
+X = sm.add_constant(macro_df[[<span class="st">'pib_gap','desemprego','selic'</span>]])
+satellite = OLS(logit_dr, X).fit()
+
+<span class="cm"># Escalar PDs individuais pelo coeficiente macro</span>
+pd_pit = sigmoid(logit(pd_ttc) + scalar_macro)
+        </div>
+      </div>
+      <div class="col-md-6">
+        <h3>Cenários IFRS 9</h3>
+        <p style="font-size:.84rem;color:var(--text-2);">
+          O padrão recomenda considerar <strong>múltiplos cenários ponderados</strong>:
+        </p>
+        <table class="table-custom" style="font-size:.79rem;">
+          <thead><tr><th>Cenário</th><th>Peso</th><th>PIB delta</th><th>PD scalar</th></tr></thead>
+          <tbody>
+            <tr><td>Base</td><td>50%</td><td>+1.5%</td><td>×1.00</td></tr>
+            <tr><td>Otimista</td><td>25%</td><td>+3.0%</td><td>×0.75</td></tr>
+            <tr><td>Adverso</td><td>20%</td><td>−1.0%</td><td>×1.40</td></tr>
+            <tr><td>Severo</td><td>5%</td><td>−3.5%</td><td>×2.20</td></tr>
+          </tbody>
+        </table>
+        <div class="formula-box mt-2" style="font-size:.78rem;">
+          $$PD_{final} = \sum_s w_s \times PD_s$$
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 9. Matriz de Migração e Estágios ─────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-shuffle"></i></span> Matriz de Migração de Estágios</h2>
+    <p>
+      A alocação de contratos entre os três estágios do IFRS 9 é dinâmica.
+      A <strong>matriz de migração</strong> (Markov) mostra as probabilidades de transição
+      entre estágios de um período para o outro.
+    </p>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <table class="table-custom text-center" style="font-size:.8rem;">
+          <thead>
+            <tr>
+              <th>De \ Para</th><th>Stage 1</th><th>Stage 2</th><th>Stage 3</th><th>Quitado</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="fw-600 text-start">Stage 1</td><td class="metric-good">88%</td><td>9%</td><td>1%</td><td>2%</td></tr>
+            <tr><td class="fw-600 text-start">Stage 2</td><td class="metric-good">22%</td><td class="metric-warn">58%</td><td>14%</td><td>6%</td></tr>
+            <tr><td class="fw-600 text-start">Stage 3</td><td>5%</td><td>12%</td><td class="metric-bad">73%</td><td>10%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="col-md-6">
+        <p style="font-size:.84rem;color:var(--text-2);">
+          <strong>SICR (Significant Increase in Credit Risk)</strong> é o gatilho para migrar
+          do Stage 1 ao Stage 2. Critérios comuns:
+        </p>
+        <ul style="font-size:.82rem;color:var(--text-2);">
+          <li>Atraso ≥ 30 dias (presunção refutável do IASB)</li>
+          <li>PD lifetime atual > PD lifetime inicial × threshold (ex.: 2×)</li>
+          <li>Watchlist / covenant breach</li>
+          <li>Mudança qualitativa (ex.: perda de emprego do cliente)</li>
+        </ul>
+        <div class="callout callout-info mt-2" style="font-size:.8rem;">
+          <strong>IFRS 9 — Presunção de 30 dias:</strong> Contratos com ≥ 30 dias de atraso
+          presumem SICR ocorrido. O banco pode refutar com evidência.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 10. Backtesting ──────────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-vials"></i></span> Backtesting e Validação do Modelo de PD</h2>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <h3>Testes de Discriminação</h3>
+        <table class="table-custom" style="font-size:.79rem;">
+          <thead><tr><th>Teste</th><th>O que mede</th><th>Threshold</th></tr></thead>
+          <tbody>
+            <tr><td>AUC-ROC</td><td>Separação geral</td><td>≥ 0.70</td></tr>
+            <tr><td>Gini</td><td>= 2×AUC−1</td><td>≥ 0.40</td></tr>
+            <tr><td>KS</td><td>Máxima separação</td><td>≥ 0.30</td></tr>
+            <tr><td>PSI</td><td>Estabilidade da distribuição de scores</td><td>&lt; 0.10 estável</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="col-md-6">
+        <h3>Testes de Calibração</h3>
+        <table class="table-custom" style="font-size:.79rem;">
+          <thead><tr><th>Teste</th><th>O que mede</th><th>Threshold</th></tr></thead>
+          <tbody>
+            <tr><td>Hosmer-Lemeshow</td><td>PD previsto vs realizado por decil</td><td>p-valor &gt; 0.05</td></tr>
+            <tr><td>Brier Score</td><td>MSE entre PD prevista e default real</td><td>&lt; 0.10 bom</td></tr>
+            <tr><td>Traffic light</td><td>Número de defaults vs esperado</td><td>Zona verde = OK</td></tr>
+            <tr><td>Spiegelhalter Z</td><td>Proporcionalidade da calibração</td><td>|Z| &lt; 1.96</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="formula-box mt-3" style="font-size:.8rem;">
+      $$\text{PSI} = \sum_i \left(P_{atual,i} - P_{base,i}\right) \times \ln\left(\frac{P_{atual,i}}{P_{base,i}}\right)$$
+      <span>PSI &lt; 0.10 = estável | 0.10–0.25 = atenção | &gt; 0.25 = recalibrar</span>
+    </div>
+  </div>
+
+  <div class="takeaways">
+    <h4><i class="fas fa-lightbulb me-2"></i>Principais Aprendizados</h4>
+    <ul>
+      <li>O modelo de Regressão Logística é preferido pela interpretabilidade — reguladores exigem explicações</li>
+      <li>O GBM captura interações não-lineares mas exige validação extra (backtesting, estabilidade)</li>
+      <li>Gini > 0.40 e KS > 0.30 são limiares mínimos aceitáveis em crédito</li>
+      <li>Calibração é tão importante quanto discriminação — a PD deve ser uma probabilidade real</li>
+      <li>credit_score_current e debt_to_income são os drives mais importante no nosso dataset</li>
+    </ul>
+  </div>
+
+  <div class="module-nav">
+    <a href="/modulo/2"><i class="fas fa-arrow-left"></i> Módulo 2</a>
+    <a href="/modulo/4" class="next-btn">Módulo 4: Modelo de LGD <i class="fas fa-arrow-right"></i></a>
+  </div>
+
+</div>
+{% endblock %}

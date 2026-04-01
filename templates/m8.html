@@ -1,0 +1,482 @@
+{% extends "base.html" %}
+{% block title %}Módulo 8 — Produção e Governança{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="module-badge"><i class="fas fa-rocket"></i> Módulo 8 de 8</div>
+  <h1>Implementação em Produção e Governança</h1>
+  <p class="page-desc">Ciclo de vida do modelo, validação independente, integração contábil, backtesting operacional e governança regulatória.</p>
+</div>
+
+<div class="page-body">
+
+  <!-- ── Objetivos de Aprendizagem ─────────────────────────── -->
+  <div class="objectives-block">
+    <div class="objectives-header"><i class="fas fa-bullseye"></i> Objetivos de Aprendizagem</div>
+    <div class="objectives-body">
+      <ul>
+        <li>Entender o ciclo de vida completo de um modelo de crédito em produção</li>
+        <li>Conhecer os princípios de Model Risk Management (MRM) e as 3 linhas de defesa</li>
+        <li>Compreender o que é a validação independente e quais testes ela realiza</li>
+        <li>Saber como o backtesting operacional monitora a saúde do modelo ao longo do tempo</li>
+        <li>Entender como a ECL é registrada contabilmente no balanço patrimonial</li>
+        <li>Conhecer a estrutura de governança: comitês, alçadas e requisitos do BACEN</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ── 0. Para quem está começando ───────────────────────── -->
+  <div class="beginner-block mb-4">
+    <div class="beginner-header">
+      <i class="fas fa-graduation-cap me-2"></i>Para quem está começando — O caminho depois do modelo
+    </div>
+    <div class="beginner-body">
+      <p>Você aprendeu a construir modelos de PD, LGD e EAD, e a calcular a ECL. Mas em um banco real, <strong>construir o modelo é apenas o começo</strong>. Antes de o modelo gerar números que afetam o balanço do banco, ele precisa passar por um processo rigoroso de aprovação, validação e monitoramento contínuo.</p>
+      <div class="beginner-highlight">
+        <i class="fas fa-lightbulb me-2" style="color:#3b82f6;"></i>
+        Imagine que você construiu um GPS. Antes de colocar em todos os carros do banco, você precisa provar que ele funciona, que outras pessoas verificaram que funciona, e ter um plano caso ele comece a errar.
+      </div>
+      <p>Este módulo cobre exactamente isso: o que acontece depois que o modelo está pronto.</p>
+    </div>
+  </div>
+
+  <!-- ── 1. Ciclo de Vida do Modelo ────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-arrows-spin"></i></span> Ciclo de Vida do Modelo</h2>
+    <p>Um modelo IFRS 9 em produção passa por cinco fases bem definidas. Reguladores e auditores verificam cada etapa.</p>
+    <div class="row g-3 mt-1">
+      {% for step, icon, color, title, desc in [
+        ('1','fas fa-flask','#3b82f6','Desenvolvimento','Definição do escopo, seleção de features, treinamento, ajuste de hiperparâmetros e documentação do modelo.'),
+        ('2','fas fa-vials','#8b5cf6','Validação Independente','Equipe independente (2ª linha) reproduz os resultados e aplica testes adicionais de robustez.'),
+        ('3','fas fa-stamp','#f59e0b','Aprovação em Comitê','O Comitê de Risco de Modelos (CRM) aprova o modelo para uso em produção com eventuais condicionantes.'),
+        ('4','fas fa-server','#059669','Implementação em Produção','O modelo é configurado nos sistemas do banco (core, DWH, plataformas de risco) e entra em cálculo mensal.'),
+        ('5','fas fa-gauge','#dc2626','Monitoramento Contínuo','KPIs de performance são acompanhados mensalmente. Gatilhos automáticos disparam recalibração se necessário.'),
+      ] %}
+      <div class="col-md-4">
+        <div class="kpi-card" style="border-top:4px solid {{ color }};">
+          <div style="font-size:1.5rem;font-weight:800;color:{{ color }};margin-bottom:.3rem;">{{ step }}</div>
+          <div class="kpi-label"><i class="{{ icon }} me-1" style="color:{{ color }};"></i>{{ title }}</div>
+          <p style="font-size:.82rem;color:var(--text-2);margin:.5rem 0 0;">{{ desc }}</p>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="callout callout-info mt-3" style="font-size:.85rem;">
+      <strong>Tempo típico de ciclo:</strong> Desenvolvimento (2–4 meses) → Validação (1–2 meses) → Aprovação em comitê (1 mês) → Implementação técnica (1–3 meses) → Go-live. Total: 6–12 meses para um modelo novo de grande porte.
+    </div>
+  </div>
+
+  <!-- ── 2. Model Risk Management (MRM) ────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-shield-halved"></i></span> Model Risk Management (MRM)</h2>
+    <p>
+      O <strong>risco de modelo</strong> é o risco de perdas decorrentes de decisões baseadas em modelos incorretos,
+      mal utilizados ou inadequados para a finalidade. O MRM é o conjunto de políticas e processos para identificar,
+      mensurar, controlar e mitigar esse risco.
+    </p>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <h3>As 3 Linhas de Defesa</h3>
+        <table class="table-custom" style="font-size:.82rem;">
+          <thead><tr><th>Linha</th><th>Responsável</th><th>Papel no MRM</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="fw-600" style="color:#3b82f6;">1ª Linha</td>
+              <td>Área de negócio / Modelagem</td>
+              <td>Constrói, documenta e é responsável pelo modelo. Dona do risco.</td>
+            </tr>
+            <tr>
+              <td class="fw-600" style="color:#8b5cf6;">2ª Linha</td>
+              <td>Validação Independente / Risco</td>
+              <td>Valida de forma independente. Emite parecer formal com condicionantes.</td>
+            </tr>
+            <tr>
+              <td class="fw-600" style="color:#059669;">3ª Linha</td>
+              <td>Auditoria Interna</td>
+              <td>Audita o processo de MRM. Verifica se as políticas estão sendo seguidas.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="col-md-6">
+        <h3>Política de Risco de Modelos</h3>
+        <p style="font-size:.84rem; color:var(--text-2);">
+          Uma política formal de MRM deve definir ao menos:
+        </p>
+        <ul style="font-size:.82rem;color:var(--text-2);">
+          <li>Escopo: quais modelos estão sujeitos à política (inventário de modelos)</li>
+          <li>Materialidade: como classificar modelos por nível de risco (alto / médio / baixo)</li>
+          <li>Frequência de revisão: modelos críticos revisados anualmente</li>
+          <li>Critérios automáticos de recalibração (PSI, backtesting)</li>
+          <li>Requisitos de documentação: MDA (Model Documentation Artifact) ou MPA</li>
+          <li>Aprovações necessárias por tier de risco</li>
+        </ul>
+        <div class="callout callout-warn mt-2" style="font-size:.8rem;">
+          <strong>SR 11-7 (Federal Reserve):</strong> A referência global em MRM. O BACEN não publicou um equivalente formal, mas os princípios do SR 11-7 são adotados pelos grandes bancos brasileiros.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 3. Validação Independente ─────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-magnifying-glass"></i></span> Validação Independente de Modelos</h2>
+    <p>
+      A validação independente (<em>model validation</em>) é realizada pela 2ª linha de defesa — uma equipe
+      separada da equipe de desenvolvimento. O objetivo é verificar se o modelo é conceitualmente sólido,
+      estatisticamente robusto e adequado para o uso proposto.
+    </p>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <h3>Testes de Discriminação</h3>
+        <table class="table-custom" style="font-size:.80rem;">
+          <thead><tr><th>Teste</th><th>O que verifica</th><th>Threshold</th></tr></thead>
+          <tbody>
+            <tr><td>AUC-ROC</td><td>Separa bons e maus pagadores</td><td>≥ 0.70</td></tr>
+            <tr><td>Gini</td><td>= 2×AUC - 1</td><td>≥ 0.40</td></tr>
+            <tr><td>KS</td><td>Máxima separação das distribuições</td><td>≥ 0.30</td></tr>
+            <tr><td>Lift Curve</td><td>Concentração de defaults no topo</td><td>Lift ≥ 2× no decil 1</td></tr>
+          </tbody>
+        </table>
+
+        <h3 class="mt-3">Testes de Calibração</h3>
+        <table class="table-custom" style="font-size:.80rem;">
+          <thead><tr><th>Teste</th><th>O que verifica</th><th>Threshold</th></tr></thead>
+          <tbody>
+            <tr><td>Hosmer-Lemeshow</td><td>PD prevista vs realizada por decil</td><td>p-valor &gt; 0.05</td></tr>
+            <tr><td>Brier Score</td><td>MSE da probabilidade prevista</td><td>&lt; 0.10</td></tr>
+            <tr><td>Traffic Light</td><td>Defaults reais vs esperados</td><td>Zona verde = OK</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="col-md-6">
+        <h3>Testes de Estabilidade</h3>
+        <table class="table-custom" style="font-size:.80rem;">
+          <thead><tr><th>Teste</th><th>O que verifica</th><th>Threshold</th></tr></thead>
+          <tbody>
+            <tr><td>PSI</td><td>Distribuição de scores se manteve</td><td>&lt; 0.10 estável</td></tr>
+            <tr><td>CSI</td><td>Distribuição das features</td><td>&lt; 0.10 estável</td></tr>
+            <tr><td>Backtesting temporal</td><td>Performance em janelas out-of-time</td><td>AUC não degradou &gt; 5pp</td></tr>
+          </tbody>
+        </table>
+
+        <div class="formula-box mt-3" style="font-size:.8rem;">
+          $$\text{PSI} = \sum_i (P_t - P_0) \times \ln\!\left(\frac{P_t}{P_0}\right)$$
+
+          PSI &lt; 0.10 → estável
+          0.10–0.25 → monitorar
+          &gt; 0.25 → recalibrar
+        </div>
+
+        <div class="callout callout-success mt-2" style="font-size:.8rem;">
+          <strong>Benchmarking:</strong> A validação deve incluir um modelo alternativo (benchmark) para comparar se o modelo oficial é realmente melhor que uma abordagem mais simples.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 4. Backtesting Operacional ─────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-traffic-light"></i></span> Backtesting Operacional e Semáforos de Alerta</h2>
+    <p>
+      Depois que o modelo entra em produção, ele precisa ser monitorado continuamente.
+      O <strong>backtesting operacional</strong> compara as previsões do modelo com o que realmente aconteceu,
+      mês a mês, e usa um sistema de semáforos para disparar alertas.
+    </p>
+    <div class="row g-4">
+      <div class="col-md-7">
+        <h3>Sistema de Semáforos (Traffic Light)</h3>
+        <table class="table-custom" style="font-size:.82rem;">
+          <thead>
+            <tr><th>Cor</th><th>Condição</th><th>Ação</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span style="background:#dcfce7;color:#166534;padding:.2rem .6rem;border-radius:20px;font-size:.75rem;font-weight:700;">VERDE</span></td>
+              <td>PSI &lt; 0.10 e AUC degradação &lt; 3pp</td>
+              <td>Nenhuma ação necessária. Monitoramento padrão.</td>
+            </tr>
+            <tr>
+              <td><span style="background:#fef9c3;color:#854d0e;padding:.2rem .6rem;border-radius:20px;font-size:.75rem;font-weight:700;">AMARELO</span></td>
+              <td>PSI 0.10–0.25 OU degradação 3–5pp</td>
+              <td>Investigar causa. Preparar proposta de recalibração.</td>
+            </tr>
+            <tr>
+              <td><span style="background:#fee2e2;color:#991b1b;padding:.2rem .6rem;border-radius:20px;font-size:.75rem;font-weight:700;">VERMELHO</span></td>
+              <td>PSI &gt; 0.25 OU degradação &gt; 5pp</td>
+              <td>Recalibração obrigatória. Escalar para Comitê de Risco de Modelos.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-info mt-3" style="font-size:.82rem;">
+          <strong>Gatilhos automáticos vs julgamento:</strong> Semáforos são automáticos, mas a decisão de recalibrar vs aplicar overlay deve ser aprovada pelo gestor do modelo e registrada no log de governança do modelo.
+        </div>
+      </div>
+      <div class="col-md-5">
+        <h3>Frequência de Monitoramento</h3>
+        <ul style="font-size:.84rem;color:var(--text-2);">
+          <li><strong>Mensal:</strong> PSI, distribuição de scores, cobertura ECL/EAD</li>
+          <li><strong>Trimestral:</strong> AUC/Gini/KS em amostra out-of-time, Brier Score</li>
+          <li><strong>Semestral:</strong> Hosmer-Lemeshow, análise de sobrevivência</li>
+          <li><strong>Anual:</strong> Revisão completa do modelo (full redevelopment assessment)</li>
+        </ul>
+        <div class="formula-box mt-2" style="font-size:.78rem;">
+          Degradação de AUC (%) =
+          (AUC_atual − AUC_desenvolvimento) / AUC_desenvolvimento × 100
+
+          Ex.: AUC dev = 0.82; AUC atual = 0.76
+          Degradação = (0.76 − 0.82) / 0.82 = −7.3% → VERMELHO
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 5. Integração Contábil ─────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-book"></i></span> Integração Contábil da ECL</h2>
+    <p>
+      A ECL calculada pelos modelos precisa ser <strong>reconhecida no balanço patrimonial</strong> do banco.
+      Entender como isso funciona é fundamental para quem trabalha na interface entre risco e contabilidade.
+    </p>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <h3>Provisão para Perdas Esperadas (PDD)</h3>
+        <p style="font-size:.84rem;color:var(--text-2);">
+          A ECL calculada é registrada como <strong>Provisão para Devedores Duvidosos (PDD)</strong>,
+          que é uma conta redutora do ativo (carteira de crédito).
+        </p>
+        <div class="formula-box" style="font-size:.8rem;">
+          Constituição de provisão inicial:
+          Dr. Despesa de Provisão (P&amp;L)  R$ X
+          Cr. PDD — Ativo Circulante      R$ X
+
+          Impacto: reduz o lucro do período e o ativo líquido
+        </div>
+        <div class="formula-box mt-2" style="font-size:.8rem;">
+          Reversão (quando risco melhora):
+          Dr. PDD — Ativo Circulante      R$ Y
+          Cr. Receita de Reversão (P&amp;L)  R$ Y
+        </div>
+      </div>
+      <div class="col-md-6">
+        <h3>Rollforward da Provisão</h3>
+        <p style="font-size:.84rem;color:var(--text-2);">
+          A reconciliação trimestral da provisão (<em>rollforward</em>) explica a variação do saldo:
+        </p>
+        <table class="table-custom" style="font-size:.80rem;">
+          <thead>
+            <tr><th>Movimento</th><th>Impacto</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Saldo inicial</td><td>PDD abertura do período</td></tr>
+            <tr><td class="metric-bad">+ Constituição nova</td><td>Novos contratos + deterioração</td></tr>
+            <tr><td class="metric-bad">+ Stage migration 1→2 / 1→3</td><td>Cliff effect — maior impacto</td></tr>
+            <tr><td class="metric-good">− Reversão</td><td>Melhora de risco, Stage 2→1</td></tr>
+            <tr><td class="metric-good">− Write-off</td><td>Baixa de crédito irrecuperável</td></tr>
+            <tr><td>± FX / amortização</td><td>Variação cambial e amortização de juros</td></tr>
+            <tr><td class="fw-600">= Saldo final</td><td>PDD encerramento do período</td></tr>
+          </tbody>
+        </table>
+        <div class="callout callout-warn mt-2" style="font-size:.8rem;">
+          <strong>IFRS 7:</strong> O rollforward completo da provisão por estágio deve ser divulgado nas notas explicativas anuais e semestrais. É um dos principais pontos de análise dos auditores externos.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 6. Calendário e Periodicidade ──────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-calendar-check"></i></span> Calendário e Periodicidade do Ciclo IFRS 9</h2>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <h3>Ciclo Mensal de Cálculo</h3>
+        <p style="font-size:.84rem;color:var(--text-2);">
+          Em bancos com milhões de contratos, o cálculo da ECL segue um calendário rígido:
+        </p>
+        <ul style="font-size:.82rem;color:var(--text-2);">
+          <li><strong>D-3:</strong> Fechamento da carteira de crédito no core banking</li>
+          <li><strong>D-2:</strong> Extração e transformação dos dados (ETL) para o motor de risco</li>
+          <li><strong>D-1:</strong> Execução do cálculo de PD, LGD, EAD e ECL</li>
+          <li><strong>D0:</strong> Conferência pelos times de Risco e Contabilidade</li>
+          <li><strong>D+1:</strong> Lançamento contábil da provisão</li>
+          <li><strong>D+3:</strong> Relatório gerencial para comitês</li>
+        </ul>
+      </div>
+      <div class="col-md-6">
+        <h3>Gatilhos de Recalibração</h3>
+        <p style="font-size:.84rem;color:var(--text-2);">
+          Além do monitoramento rotineiro, eventos específicos exigem revisão antecipada:
+        </p>
+        <ul style="font-size:.82rem;color:var(--text-2);">
+          <li>PSI > 0.25 em qualquer feature crítica</li>
+          <li>Mudança regulatória material (ex: nova resolução BCB)</li>
+          <li>Evento macroeconômico severo (pandemia, crise sistêmica)</li>
+          <li>Alteração significativa na política de crédito (ex: novo produto)</li>
+          <li>Aquisição de carteira de terceiros (carteira nova sem histórico)</li>
+        </ul>
+        <div class="callout callout-info mt-2" style="font-size:.8rem;">
+          <strong>Recalibração vs Redesenvolvimento:</strong> Recalibração ajusta os coeficientes mantendo a estrutura do modelo. Redesenvolvimento substitui o modelo completamente e reinicia o ciclo de aprovação.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 7. Documentação do Modelo (MDA/MDR) ────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-file-lines"></i></span> Documentação do Modelo (MDA / MDR)</h2>
+    <p>
+      Uma <strong>documentação adequada</strong> é tão importante quanto o modelo em si. Auditores externos,
+      reguladores (BACEN) e equipes de validação dependem dela. A estrutura padrão de um
+      <em>Model Documentation Artifact (MDA)</em> ou <em>Model Development Report (MDR)</em> inclui:
+    </p>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <h3>Seções Obrigatórias</h3>
+        <ul style="font-size:.82rem;color:var(--text-2);">
+          <li><strong>1. Sumário Executivo:</strong> objetivo, escopo, uso pretendido</li>
+          <li><strong>2. Dados:</strong> fonte, período, critérios de corte, exclusões</li>
+          <li><strong>3. Definição de default e target:</strong> conforme IFRS 9 / Basileia</li>
+          <li><strong>4. Seleção de features:</strong> IV, correlação, rationale de negócio</li>
+          <li><strong>5. Metodologia:</strong> algoritmo, hiperparâmetros, transformações</li>
+          <li><strong>6. Resultados e métricas:</strong> treino, validação, out-of-time</li>
+          <li><strong>7. Backtesting e limitações:</strong> gaps conhecidos do modelo</li>
+          <li><strong>8. Plano de uso e monitoramento:</strong> gatilhos, semáforos</li>
+        </ul>
+      </div>
+      <div class="col-md-6">
+        <h3>O que auditores verificam</h3>
+        <div class="callout callout-warn" style="font-size:.83rem;">
+          <strong>Pontos de atenção frequentes da auditoria externa:</strong>
+          <ul style="margin:.5rem 0 0;padding-left:1.2rem;">
+            <li>Definição de default consistente com IFRS 9 §B5.5.37</li>
+            <li>Incorporação de informação forward-looking documentada</li>
+            <li>Cálculo correto de PD marginal vs cumulativa</li>
+            <li>Floor de LGD ≥ 0 e EAD ≥ saldo atual</li>
+            <li>Rollforward da provisão auditável</li>
+            <li>Evidência de aprovação em comitê (ata assinada)</li>
+            <li>Log de alterações do modelo (audit trail)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 8. Governança e Comitês ────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-people-roof"></i></span> Governança, Comitês e Regulação BCB</h2>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <h3>Estrutura de Comitês</h3>
+        <table class="table-custom" style="font-size:.80rem;">
+          <thead>
+            <tr><th>Comitê</th><th>Pauta relacionada a IFRS 9</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="fw-600">Comitê de Risco de Modelos (CRM)</td>
+              <td>Aprovação de modelos novos, recalibrações, overlays</td>
+            </tr>
+            <tr>
+              <td class="fw-600">Comitê de Crédito</td>
+              <td>Políticas de originação que afetam PD/LGD futuros</td>
+            </tr>
+            <tr>
+              <td class="fw-600">Comitê de Auditoria</td>
+              <td>Revisão da provisão e parecer externo (Big Four)</td>
+            </tr>
+            <tr>
+              <td class="fw-600">Comité de Capital (ALCO/Capital)</td>
+              <td>Impacto da ECL no capital regulatório e dividendos</td>
+            </tr>
+            <tr>
+              <td class="fw-600">Comitê de Divulgação</td>
+              <td>Aprovação das notas explicativas (IFRS 7)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="col-md-6">
+        <h3>Regulação BCB Relevante</h3>
+        <table class="table-custom" style="font-size:.80rem;">
+          <thead>
+            <tr><th>Norma</th><th>Conteúdo</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="fw-600">Res. CMN 2.682/99</td>
+              <td>Provisão mínima obrigatória — ratings AA–H com % mínimos</td>
+            </tr>
+            <tr>
+              <td class="fw-600">Res. CMN 4.966/21 (CPC 48)</td>
+              <td>Adoção oficial do IFRS 9 no Brasil por bancos sujeitos ao CMN</td>
+            </tr>
+            <tr>
+              <td class="fw-600">Res. BCB 265/22</td>
+              <td>ICAAP — Processo de avaliação interna de adequação de capital</td>
+            </tr>
+            <tr>
+              <td class="fw-600">Res. BCB 183/21</td>
+              <td>Gerenciamento de riscos e capital — exigências para robustez dos modelos</td>
+            </tr>
+            <tr>
+              <td class="fw-600">PARES (BCB)</td>
+              <td>Programa de Avaliação de Risco Ambiental e Social — stress ESG</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="callout callout-info mt-2" style="font-size:.8rem;">
+          <strong>Res. CMN 4.966/21:</strong> Tornou obrigatório o uso da IFRS 9 (CPC 48) para bancos múltiplos, comerciais e de investimento. Entrou em vigor em 1º de janeiro de 2025 para a maioria das instituições.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Comparativo Final ──────────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-diagram-project"></i></span> Visão Integrada: Do Código ao Balanço</h2>
+    <p>Ao final deste curso, você pode ver a jornada completa — desde o Python até o balanço patrimonial do banco:</p>
+    <div class="formula-box" style="font-size:.84rem;line-height:2.2;">
+      Dados brutos da carteira (portfolio.csv)
+        ↓  <span style="color:#64748b;">src/data_generation.py</span>
+      Features: score, DTI, DPD, LTV, utilização...
+        ↓  <span style="color:#3b82f6;">Módulo 3 — Modelo de PD</span>
+      PD₁₂ₘ por contrato, PD lifetime, PIT ajustado
+        ↓  <span style="color:#059669;">Módulo 4 — Modelo de LGD</span>
+      LGD por contrato: logit-Ridge / GBM + downturn
+        ↓  <span style="color:#7c3aed;">Módulo 5 — Modelo de EAD</span>
+      EAD = Saldo + CCF × Limite disponível
+        ↓  <span style="color:#ea580c;">Módulo 6 — Cálculo da ECL</span>
+      ECL = Σ PD × LGD × EAD × DF  (por Stage)
+        ↓  <span style="color:#dc2626;">Módulo 7 — Stress Test</span>
+      ECL stress = ECL × k_PD × k_LGD
+        ↓  <span style="color:#f59e0b;">Módulo 8 — Governança</span>
+      Validação → Aprovação → Lançamento contábil (PDD)
+        ↓
+      Balanço: Carteira líquida = EAD − PDD
+    </div>
+    <div class="callout callout-success mt-3" style="font-size:.85rem;">
+      <strong>Parabéns!</strong> Você concluiu o curso de IFRS 9 — do contexto regulatório à implementação em produção. Os modelos de PD, LGD e EAD que você construiu aqui neste curso refletem, de forma simplificada, o que bancos reais utilizam para calcular suas provisões mensalmente.
+    </div>
+  </div>
+
+  <div class="takeaways">
+    <h4><i class="fas fa-lightbulb me-2"></i>Principais Aprendizados</h4>
+    <ul>
+      <li>Construir um modelo é apenas metade do trabalho — validação, aprovação e monitoramento são igualmente críticos</li>
+      <li>As 3 linhas de defesa (desenvolvimento, validação independente, auditoria) garantem que o modelo seja robusto</li>
+      <li>PSI e degradação de AUC são os principais gatilhos de recalibração em produção</li>
+      <li>A ECL entra no balanço como PDD (conta redutora do ativo) e afeta diretamente o P&amp;L</li>
+      <li>O rollforward da provisão por estágio é obrigatório na divulgação conforme IFRS 7</li>
+      <li>A Res. CMN 4.966/21 formalizou a adoção do IFRS 9 no Brasil, obrigatória a partir de 2025</li>
+    </ul>
+  </div>
+
+  <div class="module-nav">
+    <a href="/modulo/7"><i class="fas fa-arrow-left"></i> Módulo 7</a>
+    <a href="/dashboard" class="next-btn">Dashboard Final <i class="fas fa-arrow-right"></i></a>
+  </div>
+
+</div>
+{% endblock %}

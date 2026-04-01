@@ -1,0 +1,381 @@
+{% extends "base.html" %}
+{% block title %}Módulo 5 — Modelo de EAD{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="module-badge"><i class="fas fa-credit-card"></i> Módulo 5 de 8</div>
+  <h1>Modelo de EAD — Exposure at Default</h1>
+  <p class="page-desc">Quantificar a exposição real no momento do default. Credit Conversion Factor (CCF) para produtos rotativos.</p>
+</div>
+
+<div class="page-body">
+  <!-- ── Objetivos de Aprendizagem ────────────────────────── -->
+  <div class="objectives-block">
+    <div class="objectives-header"><i class="fas fa-bullseye"></i> Objetivos de Aprendizagem</div>
+    <div class="objectives-body">
+      <ul>
+        <li>Entender o conceito de EAD e quando modelagem é necessária (rotativos vs não-rotativos)</li>
+        <li>Construir um modelo de CCF com Ridge e Gradient Boosting</li>
+        <li>Compreender o <em>drawdown behavior</em>: clientes sacam o limite antes do default</li>
+        <li>Entender por que R² baixo em CCF é esperado e não invalida o modelo</li>
+        <li>Diferenciar CCF de LEQ (Loan Equivalent Exposure)</li>
+        <li>Aplicar stress de EAD e interpretar floors regulatórios</li>
+      </ul>
+    </div>
+  </div>
+  <!-- ── Metrics ─────────────────────────────────────────── -->
+  {% set m = data.metrics.ead %}
+  <div class="row g-3 mb-4">
+    {% for model, color in [('ridge','#7c3aed'),('gbm','#be185d')] %}
+    {% set mm = m[model] %}
+    <div class="col-md-6">
+      <div class="kpi-card" style="border-top:4px solid {{ color }}">
+        <div class="kpi-label"><i class="fas fa-robot me-1"></i>{{ model.upper() }}</div>
+        <div class="row g-0 mt-1">
+          <div class="col-4 text-center">
+            <div style="font-size:1.4rem;font-weight:800;color:{{ color }};">{{ "%.3f"|format(mm.r2) }}</div>
+            <div class="kpi-sub">R²</div>
+          </div>
+          <div class="col-4 text-center" style="border-left:1px solid var(--border);border-right:1px solid var(--border);">
+            <div style="font-size:1.4rem;font-weight:800;color:{{ color }};">{{ "%.3f"|format(mm.mae) }}</div>
+            <div class="kpi-sub">MAE</div>
+          </div>
+          <div class="col-4 text-center">
+            <div style="font-size:1.4rem;font-weight:800;color:{{ color }};">{{ "%.3f"|format(mm.spearman) }}</div>
+            <div class="kpi-sub">Spearman</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- ── 0. Para quem está começando ─────────────────────── -->
+  <div class="beginner-block mb-4">
+    <div class="beginner-header">
+      <i class="fas fa-graduation-cap me-2"></i>Para quem está começando — Entendendo o modelo de EAD
+    </div>
+    <div class="beginner-body">
+      <p>O EAD responde: <strong>quando o cliente der default, qual será o saldo devedor que o banco vai enfrentar?</strong> Para um empréstimo simples, é fácil. Para um cartão de crédito, pode ser bem diferente do saldo de hoje.</p>
+      <div class="row g-3 mt-1">
+        <div class="col-md-6">
+          <div class="beginner-output-box">
+            <div class="output-label output-label-money">Empréstimo pessoal (não-rotativo)</div>
+            Limite: R$ 10.000<br>
+            Saldo restante hoje: R$ 7.000<br>
+            O saldo só <em>diminui</em> com o tempo — nunca sobe.<br>
+            <strong>EAD = R$ 7.000 (sem modelo necessário)</strong>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="beginner-output-box">
+            <div class="output-label output-label-money">Cartão de crédito (rotativo)</div>
+            Saldo atual: R$ 500 | Limite disponível: R$ 4.500<br>
+            Antes de dar default, o cliente pode usar mais do limite.<br>
+            CCF = 70% → EAD = R$500 + 70% × R$4.500<br>
+            <strong>EAD = R$ 3.650 (modelo necessário)</strong>
+          </div>
+        </div>
+      </div>
+      <div class="not-prob-banner mt-3">
+        <strong><i class="fas fa-triangle-exclamation me-1"></i> Atenção: o CCF NÃO é uma probabilidade, e o EAD final é um valor em R$!</strong><br>
+        O <strong>CCF</strong> ∈ [0, 1] é um <strong>fator de conversão de crédito</strong> — representa o quanto do limite disponível o cliente tende a usar antes do default.
+        CCF = 0 → não saca nada a mais; CCF = 1 → usa 100% do limite disponível.<br>
+        O <strong>EAD</strong> é o resultado final em <strong>reais (R$)</strong>, não um percentual de chance.
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 1. O que é EAD? ─────────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-dollar-sign"></i></span> O que é a Exposure at Default?</h2>
+    <p>
+      O <strong>EAD</strong> é o valor que o banco espera ter em risco no momento em que o contrato
+      entrar em default. Para produtos <em>não-rotativos</em> (ex: empréstimo pessoal com prazo fixo),
+      o saldo devedor é determinístico. Para produtos <em>rotativos</em> (ex: cartão de crédito, cheque especial),
+      o cliente pode sacar até o limite — o que exige um modelo.
+    </p>
+    <div class="formula-box">
+      $$\text{EAD} = \text{Saldo Atual} + CCF \times \text{Limite Não Utilizado}$$
+
+      onde:  CCF = Credit Conversion Factor ∈ [0, 1]
+
+      Para produtos não-rotativos: CCF = 0 (EAD = saldo atual)
+    </div>
+  </div>
+
+  <!-- ── 2. CCF ───────────────────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-arrows-rotate"></i></span> Credit Conversion Factor (CCF)</h2>
+    <p>
+      O CCF captura o comportamento de uso de limite antes do default. Clientes em dificuldade
+      financeira tendem a <em>puxar</em> o limite disponível antes de dar default ("drawdown behavior").
+    </p>
+    <div class="table-responsive">
+      <table class="table-custom">
+        <thead><tr><th>Produto</th><th>Tipo</th><th>CCF Típico Real</th><th>Por quê?</th></tr></thead>
+        <tbody>
+          <tr><td class="fw-600">Empréstimo Pessoal</td><td>Não-rotativo</td><td>0%</td><td>Saldo amortiza de forma determinística</td></tr>
+          <tr><td class="fw-600">Financiamento Imob.</td><td>Não-rotativo</td><td>0%</td><td>Sem limite disponível</td></tr>
+          <tr><td class="fw-600">Cartão de Crédito</td><td>Rotativo</td><td>55–80%</td><td>Uso intensivo pré-default</td></tr>
+          <tr><td class="fw-600">Cheque Especial</td><td>Rotativo</td><td>60–90%</td><td>Muito utilizado em sufoco financeiro</td></tr>
+          <tr><td class="fw-600">Crédito Consignado</td><td>Não-rotativo</td><td>0%</td><td>Parcela descontada em folha</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── 3. Metodologia ──────────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-cogs"></i></span> Metodologia</h2>
+    <div class="callout callout-danger mb-4">
+      <strong><i class="fas fa-triangle-exclamation me-1"></i> O CCF NÃO é uma probabilidade — o EAD é um valor monetário</strong><br><br>
+      O CCF ∈ [0, 1] é um <strong>fator de conversão de crédito</strong> (credit conversion factor), não uma chance de evento.<br>
+      <strong>CCF = 0</strong> → o cliente não usa mais nada do limite antes do default<br>
+      <strong>CCF = 1</strong> → o cliente usa 100% do limite disponível antes do default<br><br>
+      Assim como o logit do LGD, a transformação sigmoid é usada apenas para manter o CCF em [0, 1].<br>
+      O <strong>resultado final</strong> do modelo é o <strong>EAD em R$</strong>: EAD = Saldo + CCF × Limite Disponível.
+    </div>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <h3>Abordagem de Modelagem</h3>
+        <p style="font-size:.88rem;">
+          O CCF também é uma variável bounded [0,1]. Aplicamos Ridge na transformação logit,
+          similar ao LGD. O GBM modela diretamente o CCF com clipping.
+        </p>
+        <div class="code-block">
+<span class="cm"># Features do modelo EAD/CCF</span>
+ead_features = [
+    <span class="st">"ccf_hist"</span>,   <span class="cm"># histórico de uso</span>
+    <span class="st">"util_rate"</span>,  <span class="cm"># taxa de utilização atual</span>
+    <span class="st">"tenor"</span>,      <span class="cm"># prazo do contrato</span>
+    <span class="st">"income"</span>,     <span class="cm"># renda do cliente</span>
+    <span class="st">"saldo"</span>,      <span class="cm"># saldo atual</span>
+]
+
+<span class="cm"># Para não-rotativos: EAD = saldo direto</span>
+mask_rotativo = df[<span class="st">"loan_type"</span>] == <span class="st">"Cartao"</span>
+df.loc[~mask_rotativo, <span class="st">"ead_pred"</span>] = (
+    df.loc[~mask_rotativo, <span class="st">"saldo"</span>]
+)
+        </div>
+      </div>
+      <div class="col-md-6">
+        <h3>Desafio: R² Baixo</h3>
+        <div class="callout callout-warn" style="font-size:.83rem;">
+          <strong>EAD real tem R² baixo — e isso é esperado!</strong><br><br>
+          O CCF é altamente estocástico. Mesmo em bancos com décadas de dados,
+          R² de 0.05–0.15 para CCF bruto é comum. O que importa é que o
+          <em>CCF médio por segmento</em> esteja bem calibrado para o ECL agregado.
+        </div>
+        <div class="callout callout-info mt-2" style="font-size:.83rem;">
+          <strong>Prática regulatória:</strong> Muitos bancos usam CCFs médios históricos
+          por produto/bucket ao invés de modelos individuais por contrato.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Chart ──────────────────────────────────────────── -->
+  <div class="chart-container mb-4">
+    <div class="chart-title"><i class="fas fa-image me-2"></i>Distribuição do CCF e Previsto vs Real por Produto</div>
+    <img src="/plots/07_ead_model.png" class="chart-img" alt="EAD Model" onerror="this.style.display='none'">
+  </div>
+
+  <!-- ── Métricas ────────────────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-table"></i></span> Métricas do Modelo</h2>
+    <div class="table-responsive">
+      <table class="table-custom">
+        <thead><tr><th>Métrica</th><th>Ridge</th><th>GBM</th><th>Benchmark Típico Real</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="fw-600">R²</td>
+            <td class="{{ 'metric-warn' if m.ridge.r2 < 0.1 else 'metric-good' }}">{{ "%.3f"|format(m.ridge.r2) }}</td>
+            <td class="{{ 'metric-warn' if m.gbm.r2 < 0.1 else 'metric-good' }}">{{ "%.3f"|format(m.gbm.r2) }}</td>
+            <td style="font-size:.82rem;">0.05–0.20 (normal para CCF)</td>
+          </tr>
+          <tr>
+            <td class="fw-600">MAE</td>
+            <td>{{ "%.3f"|format(m.ridge.mae) }}</td>
+            <td>{{ "%.3f"|format(m.gbm.mae) }}</td>
+            <td style="font-size:.82rem;">Erro pontual aceitável se calibração agregada OK</td>
+          </tr>
+          <tr>
+            <td class="fw-600">Spearman ρ</td>
+            <td>{{ "%.3f"|format(m.ridge.spearman) }}</td>
+            <td>{{ "%.3f"|format(m.gbm.spearman) }}</td>
+            <td style="font-size:.82rem;">Ranking fraco é esperado para CCF</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── 5. LEQ vs CCF: diferença conceitual ─────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-not-equal"></i></span> LEQ × CCF: diferença conceitual</h2>
+    <p>
+      Os termos são frequentemente confundidos, mas têm definições distintas na literatura de crédito:
+    </p>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <h3>CCF — Credit Conversion Factor</h3>
+        <div class="formula-box" style="font-size:.8rem;">
+          $$CCF = \frac{EAD - Saldo_{atual}}{Limite_{nao\_utilizado}}$$
+
+          <span>Mede: qual fração do limite disponível será sacada até o default?</span>
+        </div>
+        <p style="font-size:.83rem;color:var(--text-2);margin-top:.5rem;">
+          CCF = 1 → cliente usa 100% do limite disponível antes de dar default.
+          CCF = 0 → não usa nada além do que já utilizou.
+        </p>
+      </div>
+      <div class="col-md-6">
+        <h3>LEQ — Loan Equivalent Exposure</h3>
+        <div class="formula-box" style="font-size:.8rem;">
+          $$LEQ = \frac{EAD - Saldo_{atual}}{\text{Compromisso total} - Saldo_{atual}}$$
+
+          <span>Mede em relação ao total comprometido, não apenas ao não-utilizado.</span>
+        </div>
+        <p style="font-size:.83rem;color:var(--text-2);margin-top:.5rem;">
+          LEQ é preferido quando a exposição total comprometida (on + off balance) é o denominador relevante.
+          Basileia II usava LEQ; Basileia III tendeu a CCF.
+        </p>
+      </div>
+    </div>
+    <div class="callout callout-info mt-3" style="font-size:.82rem;">
+      <strong>Na prática IFRS 9:</strong> Usa-se o CCF ou abordagem de comprometimento total.
+      O padrão não prescreve uma fórmula única — exige que o EAD represente a melhor
+      estimativa da exposição no momento do default.
+    </div>
+  </div>
+
+  <!-- ── 6. Drawdown Behavior ─────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-chart-waterfall"></i></span> Drawdown Behavior: Comportamento Pré-Default</h2>
+    <p>
+      Uma das descobertas mais consistentes na literatura de risco de crédito é que
+      <strong>clientes em deterioração financeira sacam os limites disponíveis antes de dar default</strong>
+      ("drawdown effect"). Isso é especialmente intenso em cartões e cheque especial.
+    </p>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <div class="formula-box" style="font-size:.8rem;">
+          $$\text{Utilização}_t = \frac{\text{Saldo}_t}{\text{Limite}_t}$$
+
+          Observação empírica:
+          $Utilização_{t-12} \approx 40\%$
+          $Utilização_{t-6}  \approx 65\%$
+          $Utilização_{t-3}  \approx 81\%$
+          $Utilização_{t=0}  \approx 94\%$ (no default)
+        </div>
+      </div>
+      <div class="col-md-6">
+        <p style="font-size:.84rem;color:var(--text-2);">
+          <strong>Implicações para modelagem:</strong>
+        </p>
+        <ul style="font-size:.82rem;color:var(--text-2);">
+          <li>Usar utilização atual como feature no modelo de CCF</li>
+          <li>Segmentar por faixa de utilização: baixa (&lt;30%), média, alta (&gt;70%)</li>
+          <li>CCF médio de clientes com utilização alta já próxima de 1.0 é menor
+              (pouco limite disponível para sacar adicionalmente)</li>
+          <li>Comportamento varia por tipo de produto e perfil de cliente</li>
+        </ul>
+        <div class="callout callout-warn mt-2" style="font-size:.79rem;">
+          <strong>Paradoxo do CCF:</strong> clientes com utilização <em>mais baixa</em>
+          tendem a ter CCF <em>mais alto</em> — há mais limite para sacar.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 7. Individual vs Segmento ───────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-layer-group"></i></span> EAD por Contrato × EAD por Segmento</h2>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <h3>Modelo Individual (contrato a contrato)</h3>
+        <p style="font-size:.84rem;color:var(--text-2);">
+          Estima o CCF para cada contrato usando features individuais. Alta variância,
+          difícil de calibrar — mas permite granularidade total para o ECL contrato a contrato.
+        </p>
+        <div class="callout callout-warn" style="font-size:.8rem;">
+          R² individual geralmente &lt; 0.10. O modelo "acerta a direção" mas o erro pontual é alto.
+          Aceitável se o <strong>ECL agregado</strong> estiver bem calibrado.
+        </div>
+      </div>
+      <div class="col-md-6">
+        <h3>CCF Médio por Segmento (pooled)</h3>
+        <p style="font-size:.84rem;color:var(--text-2);">
+          Calcula o CCF médio histórico por célula: produto × faixa de utilização × vintage.
+          Mais estável, regulatoriamente aceito, amplamente usado em bancos de médio porte.
+        </p>
+        <table class="table-custom mt-2" style="font-size:.79rem;">
+          <thead><tr><th>Produto</th><th>Utilização</th><th>CCF médio</th></tr></thead>
+          <tbody>
+            <tr><td>Cartão</td><td>&lt; 30%</td><td>72%</td></tr>
+            <tr><td>Cartão</td><td>30–70%</td><td>58%</td></tr>
+            <tr><td>Cartão</td><td>&gt; 70%</td><td>30%</td></tr>
+            <tr><td>Ch. Especial</td><td>&lt; 50%</td><td>80%</td></tr>
+            <tr><td>Ch. Especial</td><td>&gt; 50%</td><td>45%</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 8. EAD em Stress e Floor ────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-temperature-arrow-up"></i></span> Stress de EAD e Floor Regulatório</h2>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <p style="font-size:.84rem;color:var(--text-2);">
+          Em cenários de stress, o comportamento de drawdown se intensifica.
+          Bancos centrais (BCB, ECB) exigem stress de EAD nos testes de estresse.
+        </p>
+        <div class="formula-box" style="font-size:.8rem;">
+          $$EAD_{stress} = Saldo + CCF_{stress} \times Limite_{disponivel}$$
+
+          $$CCF_{stress} = \min(1,\ CCF_{base} \times (1 + \delta_{stress}))$$
+
+          <span>δ_stress típico: +25% a +50% sobre o CCF base</span>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <h3>Floors e Limites Mínimos</h3>
+        <ul style="font-size:.82rem;color:var(--text-2);">
+          <li><strong>Floor do EAD:</strong> EAD ≥ saldo atual (nunca abaixo do que já está em risco)</li>
+          <li><strong>Floor de CCF:</strong> Basileia III: CCF ≥ 0 para compromissos revogáveis;
+              CCF ≥ 10% mesmo para linhas sem saque histórico</li>
+          <li><strong>EAD mínimo em IFRS 9:</strong> inclui principal + juros accrued + fees capitalizados</li>
+          <li><strong>Cashflows futuros:</strong> para crédito revolvente, o IFRS 9 permite EAD projetado
+              ao longo da vida esperada do produto (behavioral maturity)</li>
+        </ul>
+        <div class="callout callout-info mt-2" style="font-size:.79rem;">
+          <strong>Behavioral maturity (IFRS 9):</strong> Para cartão de crédito sem vencimento definido,
+          o banco deve estimar a vida esperada com base no comportamento histórico de renovação/cancelamento.
+          Tipicamente 2–5 anos.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="takeaways">
+    <h4><i class="fas fa-lightbulb me-2"></i>Principais Aprendizados</h4>
+    <ul>
+      <li>EAD é simples para produtos não-rotativos (saldo = EAD); o desafio é nos rotativos</li>
+      <li>O CCF captura o drawdown de limite antes do default — difícil de prever individualmente</li>
+      <li>R² baixo para EAD/CCF é esperado e não invalida o modelo — calibração agregada importa mais</li>
+      <li>Para fins de ECL, muitos bancos usam CCF médios históricos por segmento ao invés de modelos ML</li>
+      <li>A IFRS 9 aceita abordagens simplificadas para EAD quando a exposição é relativamente estável</li>
+    </ul>
+  </div>
+
+  <div class="module-nav">
+    <a href="/modulo/4"><i class="fas fa-arrow-left"></i> Módulo 4</a>
+    <a href="/modulo/6" class="next-btn">Módulo 6: Cálculo da ECL <i class="fas fa-arrow-right"></i></a>
+  </div>
+
+</div>
+{% endblock %}

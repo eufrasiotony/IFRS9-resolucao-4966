@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — IFRS 9 Resultados{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="module-badge" style="background:linear-gradient(135deg,#3b82f6,#8b5cf6);"><i class="fas fa-chart-pie"></i> Dashboard</div>
+  <h1>Dashboard Final — Resultados do Modelo</h1>
+  <p class="page-desc">Visão consolidada de todos os KPIs, distribuições e métricas dos modelos de PD, LGD e EAD.</p>
+</div>
+
+<div class="page-body">
+
+  <!-- ── KPIs ───────────────────────────────────────────── -->
+  {% if data.data_available %}
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+      <div class="kpi-card">
+        <div class="kpi-label"><i class="fas fa-file-invoice-dollar me-1"></i>ECL Total</div>
+        <div class="kpi-value primary">R${{ data.kpis.ecl_M }}M</div>
+        <div class="kpi-sub">Provisão necessária</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="kpi-card">
+        <div class="kpi-label"><i class="fas fa-piggy-bank me-1"></i>EAD Total</div>
+        <div class="kpi-value">R${{ data.kpis.ead_M }}M</div>
+        <div class="kpi-sub">Exposição total</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="kpi-card">
+        <div class="kpi-label"><i class="fas fa-shield-halved me-1"></i>Cobertura</div>
+        <div class="kpi-value warn">{{ data.kpis.coverage }}%</div>
+        <div class="kpi-sub">ECL / EAD</div>
+      </div>
+    </div>
+    <div class="col-6 col-lg-3">
+      <div class="kpi-card">
+        <div class="kpi-label"><i class="fas fa-skull-crossbones me-1"></i>Taxa de Default</div>
+        <div class="kpi-value danger">{{ data.kpis.default_rate }}%</div>
+        <div class="kpi-sub">Carteira observada</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-4">
+      <div class="kpi-card kpi-stage1">
+        <div class="kpi-label">Stage 1</div>
+        <div class="kpi-value" style="color:#16a34a;">{{ data.kpis.stage1_pct }}%</div>
+        <div class="kpi-sub">Risco Normal</div>
+      </div>
+    </div>
+    <div class="col-4">
+      <div class="kpi-card kpi-stage2">
+        <div class="kpi-label">Stage 2</div>
+        <div class="kpi-value" style="color:#ea580c;">{{ data.kpis.stage2_pct }}%</div>
+        <div class="kpi-sub">Risco Aumentado</div>
+      </div>
+    </div>
+    <div class="col-4">
+      <div class="kpi-card kpi-stage3">
+        <div class="kpi-label">Stage 3</div>
+        <div class="kpi-value" style="color:#dc2626;">{{ data.kpis.stage3_pct }}%</div>
+        <div class="kpi-sub">Em Default</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ── Charts ─────────────────────────────────────────── -->
+  <div class="row g-4 mb-4">
+    <div class="col-md-6">
+      <div class="chart-container" style="min-height:300px;">
+        <div class="chart-title"><i class="fas fa-chart-pie me-2"></i>Distribuição por Estágio (nº contratos)</div>
+        <canvas id="stageChart" height="280"></canvas>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="chart-container" style="min-height:300px;">
+        <div class="chart-title"><i class="fas fa-chart-bar me-2"></i>ECL por Produto (R$ Milhões)</div>
+        <canvas id="prodChart" height="280"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4 mb-4">
+    <div class="col-md-6">
+      <div class="chart-container" style="min-height:300px;">
+        <div class="chart-title"><i class="fas fa-chart-column me-2"></i>EAD vs ECL por Estágio</div>
+        <canvas id="ecl3Chart" height="280"></canvas>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="chart-container" style="min-height:300px;">
+        <div class="chart-title"><i class="fas fa-chart-bar me-2"></i>Taxa de Cobertura por Produto (%)</div>
+        <canvas id="covChart" height="280"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Model Metrics Table ────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-star"></i></span> Resumo das Métricas dos Modelos</h2>
+    <div class="table-responsive">
+      <table class="table-custom">
+        <thead>
+          <tr><th>Modelo</th><th>Variante</th><th>Métrica 1</th><th>Métrica 2</th><th>Métrica 3</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          {% set m = data.metrics %}
+          <tr>
+            <td rowspan="2" class="fw-600">PD</td>
+            <td>Logistic</td>
+            <td>AUC = <span class="metric-good">{{ "%.3f"|format(m.pd.logistic.auc) }}</span></td>
+            <td>Gini = <span class="metric-good">{{ "%.3f"|format(m.pd.logistic.gini) }}</span></td>
+            <td>KS = <span class="metric-good">{{ "%.3f"|format(m.pd.logistic.ks) }}</span></td>
+            <td><span class="badge bg-success">Aprovado</span></td>
+          </tr>
+          <tr>
+            <td>GBM</td>
+            <td>AUC = <span class="metric-good">{{ "%.3f"|format(m.pd.gbm.auc) }}</span></td>
+            <td>Gini = <span class="metric-good">{{ "%.3f"|format(m.pd.gbm.gini) }}</span></td>
+            <td>KS = <span class="metric-good">{{ "%.3f"|format(m.pd.gbm.ks) }}</span></td>
+            <td><span class="badge bg-success">Aprovado</span></td>
+          </tr>
+          <tr>
+            <td rowspan="2" class="fw-600">LGD</td>
+            <td>Ridge (logit)</td>
+            <td>R² = <span class="metric-good">{{ "%.3f"|format(m.lgd.ridge.r2) }}</span></td>
+            <td>MAE = {{ "%.3f"|format(m.lgd.ridge.mae) }}</td>
+            <td>Spearman = <span class="metric-good">{{ "%.3f"|format(m.lgd.ridge.spearman) }}</span></td>
+            <td><span class="badge bg-success">Aprovado</span></td>
+          </tr>
+          <tr>
+            <td>GBM</td>
+            <td>R² = <span class="metric-good">{{ "%.3f"|format(m.lgd.gbm.r2) }}</span></td>
+            <td>MAE = {{ "%.3f"|format(m.lgd.gbm.mae) }}</td>
+            <td>Spearman = <span class="metric-good">{{ "%.3f"|format(m.lgd.gbm.spearman) }}</span></td>
+            <td><span class="badge bg-success">Aprovado</span></td>
+          </tr>
+          <tr>
+            <td rowspan="2" class="fw-600">EAD/CCF</td>
+            <td>Ridge</td>
+            <td>R² = <span class="metric-warn">{{ "%.3f"|format(m.ead.ridge.r2) }}</span></td>
+            <td>MAE = {{ "%.3f"|format(m.ead.ridge.mae) }}</td>
+            <td>Spearman = <span class="metric-warn">{{ "%.3f"|format(m.ead.ridge.spearman) }}</span></td>
+            <td><span class="badge" style="background:#d97706;">Aceitável</span></td>
+          </tr>
+          <tr>
+            <td>GBM</td>
+            <td>R² = <span class="metric-warn">{{ "%.3f"|format(m.ead.gbm.r2) }}</span></td>
+            <td>MAE = {{ "%.3f"|format(m.ead.gbm.mae) }}</td>
+            <td>Spearman = <span class="metric-warn">{{ "%.3f"|format(m.ead.gbm.spearman) }}</span></td>
+            <td><span class="badge" style="background:#d97706;">Aceitável</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Plots Gallery ──────────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-images"></i></span> Galeria de Gráficos</h2>
+    <div class="row g-3">
+      {% for plot, title in [
+        ('03_pd_performance.png','ROC Curve — PD'),
+        ('04_ks_curve.png','Curva KS — PD'),
+        ('06_lgd_model.png','Modelagem LGD'),
+        ('08_ecl_results.png','ECL por Estágio'),
+        ('09_sensitivity.png','Heatmap Stress Test'),
+        ('10_feature_importance.png','Feature Importance'),
+      ] %}
+      <div class="col-md-4">
+        <a href="/plots/{{ plot }}" target="_blank" class="text-decoration-none">
+          <div class="chart-container p-0" style="overflow:hidden;cursor:pointer;">
+            <img src="/plots/{{ plot }}" style="width:100%;height:180px;object-fit:cover;"
+                 alt="{{ title }}" onerror="this.parentElement.parentElement.style.display='none'">
+            <div style="padding:.5rem .75rem;font-size:.77rem;font-weight:600;color:#475569;border-top:1px solid var(--border);">
+              {{ title }} <i class="fas fa-external-link-alt ms-1" style="font-size:.7rem;"></i>
+            </div>
+          </div>
+        </a>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="module-nav">
+    <a href="/modulo/7"><i class="fas fa-arrow-left"></i> Módulo 7</a>
+    <a href="/" class="next-btn"><i class="fas fa-home"></i> Início do Curso</a>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const stageData = {{ data.stage_data | tojson }};
+const prodData  = {{ data.prod_data  | tojson }};
+
+// Stage colours
+const SC = ['#16a34a','#ea580c','#dc2626'];
+
+// ─── Chart 1: Stage Donut ─────────────────────────────────────
+new Chart(document.getElementById('stageChart'), {
+  type: 'doughnut',
+  data: {
+    labels: stageData.map(d => 'Stage ' + d.stage),
+    datasets: [{
+      data: stageData.map(d => d.n),
+      backgroundColor: SC,
+      borderWidth: 3,
+      borderColor: '#fff'
+    }]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'bottom', labels: { font: { size: 12 } } },
+      tooltip: {
+        callbacks: {
+          label: function(ctx) {
+            const d = stageData[ctx.dataIndex];
+            const cov = (d.ecl / d.ead * 100).toFixed(1);
+            return [
+              ctx.label + ': ' + ctx.parsed.toLocaleString('pt-BR') + ' contratos',
+              'EAD: R$' + (d.ead/1e6).toFixed(1) + 'M',
+              'ECL: R$' + (d.ecl/1e6).toFixed(1) + 'M',
+              'Cobertura: ' + cov + '%'
+            ];
+          }
+        }
+      }
+    }
+  }
+});
+
+// ─── Chart 2: ECL by Product bar ────────────────────────────────
+new Chart(document.getElementById('prodChart'), {
+  type: 'bar',
+  data: {
+    labels: prodData.map(d => d.loan_type),
+    datasets: [{
+      label: 'ECL (R$M)',
+      data: prodData.map(d => +(d.ecl/1e6).toFixed(2)),
+      backgroundColor: '#3b82f6',
+      borderRadius: 6
+    }]
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 11 } } },
+      y: { grid: { display: false }, ticks: { font: { size: 11 } } }
+    }
+  }
+});
+
+// ─── Chart 3: EAD vs ECL by Stage grouped ───────────────────────
+new Chart(document.getElementById('ecl3Chart'), {
+  type: 'bar',
+  data: {
+    labels: stageData.map(d => 'Stage ' + d.stage),
+    datasets: [
+      {
+        label: 'EAD (R$M)',
+        data: stageData.map(d => +(d.ead/1e6).toFixed(1)),
+        backgroundColor: '#94a3b8',
+        borderRadius: 4
+      },
+      {
+        label: 'ECL (R$M)',
+        data: stageData.map(d => +(d.ecl/1e6).toFixed(1)),
+        backgroundColor: SC,
+        borderRadius: 4
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } },
+    scales: {
+      x: { grid: { display: false } },
+      y: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 11 } } }
+    }
+  }
+});
+
+// ─── Chart 4: Coverage by Product ───────────────────────────────
+new Chart(document.getElementById('covChart'), {
+  type: 'bar',
+  data: {
+    labels: prodData.map(d => d.loan_type),
+    datasets: [{
+      label: 'Cobertura (%)',
+      data: prodData.map(d => +(d.ecl/d.ead*100).toFixed(2)),
+      backgroundColor: prodData.map(d => {
+        const cov = d.ecl/d.ead*100;
+        return cov < 5 ? '#22c55e' : cov < 15 ? '#f97316' : '#ef4444';
+      }),
+      borderRadius: 6
+    }]
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: {
+        ticks: { callback: v => v + '%', font: { size: 11 } },
+        grid: { color: '#f1f5f9' }
+      },
+      y: { grid: { display: false }, ticks: { font: { size: 11 } } }
+    }
+  }
+});
+</script>
+{% endblock %}

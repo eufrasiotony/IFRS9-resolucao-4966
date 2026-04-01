@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+
+# Outputs gerados — rode main.py localmente para gerar
+outputs/plots/
+outputs/models/
+outputs/ecl_report_stages.csv
+outputs/model_metrics.json
+outputs/stress_test.csv
+
+# Dados processados — gerados por main.py
+data/processed/
+
+# Dados brutos (caso contenham info sensível)
+# data/raw/   # descomente se quiser excluir
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.user
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Variáveis de ambiente
+.env
+.env.*

@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}IFRS 9 Course{% endblock %}</title>
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Font Awesome 6 -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+  <!-- KaTeX (LaTeX formulas) -->
+  <link href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" rel="stylesheet">
+  <!-- Course custom CSS -->
+  <link href="/static/css/course.css" rel="stylesheet">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+<!-- ── Mobile toggle ──────────────────────────────────────── -->
+<button class="sidebar-toggle" id="sidebarToggle" aria-label="Menu">
+  <i class="fas fa-bars"></i>
+</button>
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  SIDEBAR                                               -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<nav class="sidebar" id="sidebar">
+
+  <div class="sidebar-brand">
+    <a href="/" class="brand-logo">
+      <div class="brand-icon">9</div>
+      <div class="brand-text">
+        IFRS 9
+        <span class="brand-sub">Curso de Risco de Crédito</span>
+      </div>
+    </a>
+  </div>
+
+  <div class="sidebar-nav">
+
+    <a href="/" class="{{ 'active' if current == 'home' }}">
+      <span class="nav-icon"><i class="fas fa-house"></i></span>
+      Início
+    </a>
+
+    <div class="nav-section">Fundamentos</div>
+
+    <a href="/modulo/1" class="{{ 'active' if current == 'm1' }}">
+      <span class="nav-icon"><i class="fas fa-book-open"></i></span>
+      <span>1. Introdução ao IFRS 9</span>
+    </a>
+
+    <div class="nav-section">Modelagem</div>
+
+    <a href="/modulo/2" class="{{ 'active' if current == 'm2' }}">
+      <span class="nav-icon"><i class="fas fa-database"></i></span>
+      <span>2. A Carteira de Crédito</span>
+    </a>
+    <a href="/modulo/3" class="{{ 'active' if current == 'm3' }}">
+      <span class="nav-icon"><i class="fas fa-chart-line"></i></span>
+      <span>3. Modelo de PD</span>
+    </a>
+    <a href="/modulo/4" class="{{ 'active' if current == 'm4' }}">
+      <span class="nav-icon"><i class="fas fa-percent"></i></span>
+      <span>4. Modelo de LGD</span>
+    </a>
+    <a href="/modulo/5" class="{{ 'active' if current == 'm5' }}">
+      <span class="nav-icon"><i class="fas fa-credit-card"></i></span>
+      <span>5. Modelo de EAD</span>
+    </a>
+
+    <div class="nav-section">Resultados</div>
+
+    <a href="/modulo/6" class="{{ 'active' if current == 'm6' }}">
+      <span class="nav-icon"><i class="fas fa-calculator"></i></span>
+      <span>6. Cálculo da ECL</span>
+    </a>
+    <a href="/modulo/7" class="{{ 'active' if current == 'm7' }}">
+      <span class="nav-icon"><i class="fas fa-triangle-exclamation"></i></span>
+      <span>7. Stress Testing</span>
+    </a>
+
+    <div class="nav-section">Produção</div>
+
+    <a href="/modulo/8" class="{{ 'active' if current == 'm8' }}">
+      <span class="nav-icon"><i class="fas fa-rocket"></i></span>
+      <span>8. Produção e Governança</span>
+    </a>
+
+    <div class="nav-section">Final</div>
+
+    <a href="/kpis" class="{{ 'active' if current == 'kpis' }}">
+      <span class="nav-icon"><i class="fas fa-table-cells"></i></span>
+      <span>KPIs de Carteira</span>
+    </a>
+
+    <a href="/dashboard" class="{{ 'active' if current == 'dashboard' }}">
+      <span class="nav-icon"><i class="fas fa-gauge-high"></i></span>
+      <span>Dashboard</span>
+    </a>
+
+  </div><!-- /.sidebar-nav -->
+
+  <div class="sidebar-footer">
+    <div class="d-flex align-items-center gap-2 mb-1">
+      <i class="fas fa-circle-info fa-xs"></i>
+      <span>Dados sintéticos — fins didáticos</span>
+    </div>
+    <a href="/api/data" target="_blank" class="text-decoration-none" style="color:#334155; font-size:.68rem;">
+      <i class="fas fa-code fa-xs me-1"></i>JSON API
+    </a>
+  </div>
+
+</nav><!-- /.sidebar -->
+
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  MAIN CONTENT                                          -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<main class="main-content">
+  {% block content %}{% endblock %}
+</main>
+
+
+<!-- ── Scripts ────────────────────────────────────────────── -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+
+<script>
+  // Render KaTeX formulas
+  document.addEventListener("DOMContentLoaded", function() {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "$$", right: "$$", display: true},
+        {left: "$", right: "$",   display: false}
+      ],
+      throwOnError: false
+    });
+  });
+
+  // Sidebar toggle
+  const toggle  = document.getElementById('sidebarToggle');
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebarOverlay');
+  toggle?.addEventListener('click', () => {
+    sidebar.classList.toggle('sidebar-open');
+    overlay.classList.toggle('active');
+  });
+  overlay?.addEventListener('click', () => {
+    sidebar.classList.remove('sidebar-open');
+    overlay.classList.remove('active');
+  });
+</script>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

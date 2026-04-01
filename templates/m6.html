@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+{% block title %}Módulo 6 — Cálculo da ECL{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="module-badge"><i class="fas fa-calculator"></i> Módulo 6 de 8</div>
+  <h1>Cálculo da Expected Credit Loss</h1>
+  <p class="page-desc">Integrar PD, LGD e EAD para calcular a provisão por estágio. Fator de desconto, ECL 12m e Lifetime.</p>
+</div>
+
+<div class="page-body">
+  <!-- ── Objetivos de Aprendizagem ────────────────────────── -->
+  <div class="objectives-block">
+    <div class="objectives-header"><i class="fas fa-bullseye"></i> Objetivos de Aprendizagem</div>
+    <div class="objectives-body">
+      <ul>
+        <li>Calcular a ECL integrando PD marginal, LGD, EAD e fator de desconto (EIR)</li>
+        <li>Entender como a ECL difere entre Stage 1 (12 meses) e Stage 2/3 (lifetime)</li>
+        <li>Interpretar cobertura ECL/EAD como KPI de comparação entre períodos</li>
+        <li>Comparar o provisionamento IFRS 9 à provisão mínima BCB (Res. 2.682/99)</li>
+        <li>Entender o uso de overlays (PMAs) e os requisitos de documentação</li>
+        <li>Conhecer classificação de exposições forborne e o período de probação (EBA)</li>
+      </ul>
+    </div>
+  </div>
+  <!-- ── KPIs ───────────────────────────────────────────── -->
+  {% if data.data_available %}
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="kpi-card">
+        <div class="kpi-label">ECL Total</div>
+        <div class="kpi-value primary">R${{ data.kpis.ecl_M }}M</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="kpi-card">
+        <div class="kpi-label">EAD Total</div>
+        <div class="kpi-value">R${{ data.kpis.ead_M }}M</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="kpi-card">
+        <div class="kpi-label">Cobertura</div>
+        <div class="kpi-value warn">{{ data.kpis.coverage }}%</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="kpi-card">
+        <div class="kpi-label">Carteira</div>
+        <div class="kpi-value">{{ "{:,}".format(data.kpis.n_loans).replace(",",".") }}</div>
+        <div class="kpi-sub">contratos</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ── 1. A Fórmula ────────────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-function"></i></span> A Fórmula da ECL</h2>
+    <p>
+      O <strong>IFRS 9 (parágrafo 5.5.17)</strong> define a ECL como a média ponderada de perdas de
+      crédito usando as próprias PDs como pesos:
+    </p>
+    <div class="formula-box">
+      $$ECL = \sum_{t=1}^{T} \frac{PD_t \times LGD_t \times EAD_t}{(1+r)^t}$$
+
+      onde:
+        PD_t  = probabilidade de default no período t
+        LGD_t = perda dado default no período t
+        EAD_t = exposição esperada no período t
+        r     = effective interest rate (EIR)
+        T     = 12 meses (Stage 1) ou lifetime (Stage 2 e 3)
+    </div>
+
+    <div class="row g-3 mt-2">
+      {% for stage, label, color, desc in [
+        ('1','Stage 1','#16a34a','ECL 12 meses: integração até T=12'),
+        ('2','Stage 2','#ea580c','ECL Lifetime: integração completa via PD marginal'),
+        ('3','Stage 3','#dc2626','Stage 3: PD = 100% (default já ocorreu); ECL = LGD × EAD'),
+      ] %}
+      <div class="col-md-4">
+        <div class="kpi-card" style="border-top:4px solid {{ color }};">
+          <div style="font-size:.92rem;font-weight:700;color:{{ color }};margin-bottom:.5rem;">
+            <span class="stage-badge" style="background:{{ color }};">S{{ stage }}</span> {{ label }}
+          </div>
+          <p style="font-size:.8rem;color:#64748b;margin:0;">{{ desc }}</p>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ── 2. Abordagem Marginal ────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-layer-group"></i></span> PD Marginal vs Cumulativa</h2>
+    <p>
+      Para calcular o ECL Lifetime, precisamos da PD em cada período. Partimos da
+      <strong>PD cumulativa</strong> (probabilidade de default até o mês <em>t</em>) e
+      derivamos a <strong>PD marginal</strong> (prob. de default <em>exatamente</em> no mês <em>t</em>):
+    </p>
+    <div class="formula-box">
+      $$PD_t^{\text{cumul}} = 1 - (1 - PD_{12m})^{t/12}$$
+
+      $$PD_t^{\text{marginal}} = PD_t^{\text{cumul}} - PD_{t-1}^{\text{cumul}} = (1-PD_{12m})^{(t-1)/12} \cdot PD_{12m}^{1/12}$$
+
+      ECL_Lifetime = Σ PD_t_marginal × LGD × EAD × DF_t
+    </div>
+    <div class="code-block mt-3">
+<span class="cm"># ECL por contrato - Stage 1 e 2</span>
+<span class="kw">def</span> <span class="fn">calc_ecl_lifetime</span>(pd_12m, lgd, ead, eir=<span class="nm">0.12</span>, tenor=<span class="nm">60</span>):
+    ecl = <span class="nm">0.0</span>
+    <span class="kw">for</span> t <span class="kw">in</span> range(<span class="nm">1</span>, tenor + <span class="nm">1</span>):
+        pd_marg = ((<span class="nm">1</span> - pd_12m) ** ((t-<span class="nm">1</span>)/<span class="nm">12</span>)) * ((<span class="nm">1</span>-(
+            (<span class="nm">1</span> - pd_12m) ** (<span class="nm">1</span>/<span class="nm">12</span>))))
+        df = (<span class="nm">1</span> + eir) ** (-t/<span class="nm">12</span>)
+        ecl += pd_marg * lgd * ead * df
+    <span class="kw">return</span> ecl
+
+<span class="cm"># Stage 3: PD = 1 (default já ocorreu)</span>
+ecl_s3 = lgd * ead  <span class="cm"># sem desconto temporal adicional</span>
+    </div>
+  </div>
+
+  <!-- ── 3. Resultados por Stage ──────────────────────────── -->
+  {% if data.data_available %}
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-table"></i></span> Resultados por Estágio</h2>
+    <div class="table-responsive">
+      <table class="table-custom">
+        <thead>
+          <tr>
+            <th>Estágio</th><th>Contratos</th><th>EAD</th><th>ECL</th>
+            <th>Cobertura</th><th>PD Médio</th><th>LGD Médio</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in data.stage_data %}
+          {% set color = '#16a34a' if row.stage == 1 else ('#ea580c' if row.stage == 2 else '#dc2626') %}
+          <tr>
+            <td>
+              <span class="stage-badge" style="background:{{ color }};font-size:.8rem;">
+                Stage {{ row.stage }}
+              </span>
+            </td>
+            <td>{{ "{:,}".format(row.n|int).replace(",",".") }}</td>
+            <td>R${{ "%.1f"|format(row.ead/1e6) }}M</td>
+            <td class="fw-600">R${{ "%.1f"|format(row.ecl/1e6) }}M</td>
+            <td class="{{ 'metric-good' if row.cov < 5 else ('metric-warn' if row.cov < 20 else 'metric-danger') }}">
+              {{ "%.2f"|format(row.cov) }}%
+            </td>
+            <td>{{ "%.1f"|format(row.pd_avg*100) }}%</td>
+            <td>{{ "%.1f"|format(row.lgd_avg*100) }}%</td>
+          </tr>
+          {% endfor %}
+          <tr class="table-footer-row">
+            <td class="fw-600">TOTAL</td>
+            <td>{{ "{:,}".format(data.kpis.n_loans).replace(",",".") }}</td>
+            <td class="fw-600">R${{ data.kpis.ead_M }}M</td>
+            <td class="fw-600">R${{ data.kpis.ecl_M }}M</td>
+            <td class="fw-600">{{ data.kpis.coverage }}%</td>
+            <td>{{ data.kpis.avg_pd }}%</td>
+            <td>{{ data.kpis.avg_lgd }}%</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── 4. Resultados por Produto ─────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-boxes-stacked"></i></span> ECL por Produto</h2>
+    <div class="table-responsive">
+      <table class="table-custom">
+        <thead>
+          <tr><th>Produto</th><th>Contratos</th><th>EAD</th><th>ECL</th><th>Default Rate</th><th>Cobertura</th></tr>
+        </thead>
+        <tbody>
+          {% for row in data.prod_data %}
+          <tr>
+            <td class="fw-600">{{ row.loan_type }}</td>
+            <td>{{ "{:,}".format(row.n|int).replace(",",".") }}</td>
+            <td>R${{ "%.1f"|format(row.ead/1e6) }}M</td>
+            <td>R${{ "%.1f"|format(row.ecl/1e6) }}M</td>
+            <td class="{{ 'metric-good' if row.dr < 0.05 else ('metric-warn' if row.dr < 0.12 else 'metric-danger') }}">
+              {{ "%.1f"|format(row.dr*100) }}%
+            </td>
+            <td class="{{ 'metric-good' if row.cov < 5 else ('metric-warn' if row.cov < 20 else 'metric-danger') }}">
+              {{ "%.2f"|format(row.cov) }}%
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ── Chart ──────────────────────────────────────────── -->
+  <div class="chart-container mb-4">
+    <div class="chart-title"><i class="fas fa-image me-2"></i>ECL por Estágio e por Produto</div>
+    <img src="/plots/08_ecl_results.png" class="chart-img" alt="ECL Results" onerror="this.style.display='none'">
+  </div>
+
+  <!-- ── 5. Abordagem Individual vs Coletiva ───────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-users-between-lines"></i></span> ECL Individual × ECL Coletiva</h2>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <h3>Avaliação Individual</h3>
+        <p style="font-size:.84rem;color:var(--text-2);">
+          Obrigatória para exposições <strong>materialmente significativas</strong>
+          (ex: crédito corporativo > R$10M, operações estruturadas). O modelo estima
+          PD, LGD e EAD para cada contrato com base nos dados específicos do devedor.
+        </p>
+        <ul style="font-size:.82rem;color:var(--text-2);">
+          <li>Análise de demonstrações financeiras do devedor</li>
+          <li>Avaliação de garantias e colateral individualmente</li>
+          <li>Projeção de fluxo de caixa contrato a contrato</li>
+          <li>Julgamento qualitativo do gestor de conta</li>
+        </ul>
+      </div>
+      <div class="col-md-6">
+        <h3>Avaliação Coletiva (Pooled)</h3>
+        <p style="font-size:.84rem;color:var(--text-2);">
+          Permitida para carteiras homogêneas de varejo
+          (ex: cartão, crédito pessoal, imobiliário). O ECL é calculado sobre
+          parâmetros médios do segmento.
+        </p>
+        <ul style="font-size:.82rem;color:var(--text-2);">
+          <li>Mais eficiente para carteiras com milhões de contratos</li>
+          <li>Exige robustez estatística nos segmentos (≥ 30 defaults)</li>
+          <li>Parâmetros auditados pelo externo e regulador</li>
+          <li>Overlay manual pode ser aplicado para eventos não capturados</li>
+        </ul>
+        <div class="callout callout-info mt-2" style="font-size:.8rem;">
+          <strong>Maioria dos bancos de varejo</strong> no Brasil usa abordagem
+          coletiva para 90–98% da carteira.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 6. Provisão Mínima, Overlay e Write-off ───────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-layer-group"></i></span> Provisão Mínima, Overlay e Write-off</h2>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <h3>Provisão Mínima BCB (Res. 2.682/99)</h3>
+        <p style="font-size:.84rem;color:var(--text-2);">
+          No Brasil, o BCB exige a provisão mínima da <strong>Res. 2.682/99</strong>,
+          que classifica créditos em ratings AA–H com percentuais mínimos de ECL.
+          O banco deve contabilizar o <em>maior</em> entre a ECL IFRS 9 e a provisão mínima BCB.
+        </p>
+        <table class="table-custom" style="font-size:.79rem;">
+          <thead><tr><th>Rating BCB</th><th>DPD</th><th>% mínimo</th></tr></thead>
+          <tbody>
+            <tr><td>AA</td><td>0</td><td>0%</td></tr>
+            <tr><td>A</td><td>0–14</td><td>0.5%</td></tr>
+            <tr><td>B</td><td>15–30</td><td>1%</td></tr>
+            <tr><td>C</td><td>31–60</td><td>3%</td></tr>
+            <tr><td>D</td><td>61–90</td><td>10%</td></tr>
+            <tr><td>E</td><td>91–120</td><td>30%</td></tr>
+            <tr><td>F</td><td>121–150</td><td>50%</td></tr>
+            <tr><td>G</td><td>151–180</td><td>70%</td></tr>
+            <tr><td>H</td><td>&gt; 180</td><td>100%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="col-md-6">
+        <h3>Management Overlay</h3>
+        <p style="font-size:.84rem;color:var(--text-2);">
+          Ajuste <em>top-down</em> aplicado quando os modelos quantitativos não capturam eventos
+          recentes ou emergentes (ex: COVID-19, crise energética, mudanças regulatórias).
+        </p>
+        <div class="callout callout-warn" style="font-size:.8rem;">
+          <strong>Post-Model Adjustment (PMA):</strong> Deve ser documentado, aprovado em comitê,
+          temporário e auditável. O overlay não pode ser usado para suavizar provisões
+          sem embasamento — reguladores exigem evidência.
+        </div>
+        <h3 class="mt-3">Write-off</h3>
+        <p style="font-size:.84rem;color:var(--text-2);">
+          O write-off (baixa contábil) ocorre quando não há expectativa razoável de recuperação.
+          O IFRS 9 não prescinde de critério rígido de DPD — depende do julgamento.
+          Write-off não elimina a cobrança jurídica do crédito.
+        </p>
+        <div class="formula-box" style="font-size:.8rem;">
+          Contabilização do write-off:
+          Dr ECL Acumulada (Ativo)   R$ X
+          Cr Carteira de Crédito     R$ X
+          (O P&amp;L já foi impactado quando a ECL foi constituída)
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 7. Reestruturação e Forborne Exposure ─────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-handshake"></i></span> Reestruturação e Forborne Exposure</h2>
+    <p>
+      Quando um banco concede <strong>concessões</strong> ao devedor por dificuldades financeiras
+      (redução de taxa, extensão de prazo, carência), o contrato é classificado como
+      <em>forborne</em>. É um indicador de qualidade de crédito relevante para IFRS 9.
+    </p>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <h3>Tipos de Reestruturação</h3>
+        <ul style="font-size:.82rem;color:var(--text-2);">
+          <li><strong>Carência de principal:</strong> suspensão temporária de amortizações</li>
+          <li><strong>Redução de taxa:</strong> juros abaixo do mercado (below-market rate)</li>
+          <li><strong>Extensão de prazo:</strong> tenor maior que o original</li>
+          <li><strong>Perdão parcial (haircut):</strong> redução do saldo devedor</li>
+          <li><strong>Conversão em capital:</strong> dívida → participação equity (debt-for-equity)</li>
+        </ul>
+      </div>
+      <div class="col-md-6">
+        <h3>Impacto no Stage</h3>
+        <p style="font-size:.84rem;color:var(--text-2);">
+          Contratos reestruturados <em>geralmente</em> são alocados para Stage 2 ou Stage 3.
+          A saída para Stage 1 requer período de quarentena (<em>probation period</em>):
+        </p>
+        <div class="callout callout-warn" style="font-size:.8rem;">
+          <strong>EBA: probation mínimo de 12 meses</strong> após reestruturação para
+          reclassificar de forborne Stage 3 para forborne Stage 2, e mais 24 meses
+          sem novos sinais de deterioração para remover o label forborne.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="takeaways">
+    <h4><i class="fas fa-lightbulb me-2"></i>Principais Aprendizados</h4>
+    <ul>
+      <li>A ECL é calculada separadamente para cada estágio: 12 meses (Stage 1) e Lifetime (Stage 2 e 3)</li>
+      <li>Stage 3 domina a ECL em valor absoluto apesar de representar &lt;7% dos contratos</li>
+      <li>O fator de desconto (EIR) reduz ECLs de longa maturidade — contratos mais curtos têm EAD menor ajustada</li>
+      <li>A cobertura (ECL/EAD) é o KPI principal para comparação entre períodos e com pares de mercado</li>
+      <li>Migração de Stage 1 → Stage 2 é o maior driver de aumento súbito de provisões (cliff effect)</li>
+    </ul>
+  </div>
+
+  <div class="module-nav">
+    <a href="/modulo/5"><i class="fas fa-arrow-left"></i> Módulo 5</a>
+    <a href="/modulo/7" class="next-btn">Módulo 7: Stress Testing <i class="fas fa-arrow-right"></i></a>
+  </div>
+
+</div>
+{% endblock %}

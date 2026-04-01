@@ -1,0 +1,328 @@
+{% extends "base.html" %}
+{% block title %}Módulo 2 — A Carteira de Crédito{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="module-badge"><i class="fas fa-database"></i> Módulo 2 de 8</div>
+  <h1>A Carteira de Crédito</h1>
+  <p class="page-desc">Geração de dados sintéticos: 10.000 contratos com features realistas para PD, LGD e EAD.</p>
+</div>
+
+<div class="page-body">
+
+  <!-- ── Objetivos de Aprendizagem ────────────────────────── -->
+  <div class="objectives-block">
+    <div class="objectives-header"><i class="fas fa-bullseye"></i> Objetivos de Aprendizagem</div>
+    <div class="objectives-body">
+      <ul>
+        <li>Compreender a estrutura da carteira sintética de 10.000 contratos</li>
+        <li>Identificar as features usadas nos modelos de PD, LGD e EAD</li>
+        <li>Entender as regras de staging do IFRS 9 com base em ASRC, DPD e DTI</li>
+        <li>Conhecer o conceito de segmentação de carteira para abordagem coletiva</li>
+        <li>Interpretar análise de safra (vintage) e detectar deterioração de originação</li>
+        <li>Diferenciar application score de behavioral score e sua aplicação no IFRS 9</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ── Portfolio KPIs ──────────────────────────────────── -->
+  {% if data.data_available %}
+  <div class="row g-3 mb-4">
+    {% set klist = [
+      ('Contratos','n_loans','kpi-accent','fas fa-file-contract',''),
+      ('EAD Total','ead_M','kpi-stage1','fas fa-dollar-sign','R$ '),
+      ('ECL Total','ecl_M','kpi-stage3','fas fa-triangle-exclamation','R$ '),
+      ('Default Rate','default_rate','kpi-stage2','fas fa-percent',''),
+    ] %}
+    {% for label, key, cls, icon, pref in klist %}
+    <div class="col-6 col-md-3">
+      <div class="kpi-card {{ cls }}">
+        <div class="kpi-label"><i class="{{ icon }} me-1"></i>{{ label }}</div>
+        <div class="kpi-value">{{ pref }}{{ data.kpis[key] }}{% if key == 'ead_M' or key == 'ecl_M' %}M{% elif key == 'default_rate' %}%{% endif %}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- ── 1. Dados Sintéticos ──────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-flask"></i></span> Por que dados sintéticos?</h2>
+    <p>
+      Dados reais de crédito são confidenciais e sujeitos à LGPD.
+      Neste curso, geramos uma carteira fictícia com <strong>10.000 contratos</strong>
+      usando regras estocásticas que embutem relações <em>propositalmente realistas</em>:
+    </p>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="code-block">
+<span class="cm"># src/data_generation.py — função principal</span>
+<span class="kw">def</span> <span class="fn">generate_portfolio</span>(n_loans=<span class="nm">10_000</span>, seed=<span class="nm">42</span>):
+    rng = np.random.default_rng(seed)
+
+    <span class="cm"># Score baixo → maior logit_pd → maior PD</span>
+    logit_pd = (
+        -<span class="nm">4.5</span>
+        - <span class="nm">0.006</span> * (score_current - <span class="nm">500</span>)
+        + <span class="nm">0.8</span>  * (dti > <span class="nm">0.40</span>)
+        + <span class="nm">0.40</span> * num_delinq
+        + <span class="nm">0.02</span> * dpd
+    )
+    pd_true = sigmoid(logit_pd)
+    default_flag = (rng.random(n) < pd_true)
+        </div>
+      </div>
+      <div class="col-md-6">
+        <h3>Relações embutidas</h3>
+        <ul style="font-size:.84rem;color:var(--text-2);">
+          <li>Score ↑ → PD ↓ (melhor pagador)</li>
+          <li>DTI ↑ → PD ↑ (comprometimento de renda)</li>
+          <li>Inadimplências passadas ↑ → PD ↑</li>
+          <li>Garantia imobiliária → LGD ↓ (mais recuperação)</li>
+          <li>LTV alto → LGD ↑ (garantia insuficiente)</li>
+          <li>Alta utilização → CCF ↑ (clientes sacam mais)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2. Features ──────────────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-table-list"></i></span> Features da Carteira</h2>
+    <div class="table-responsive">
+      <table class="table-custom">
+        <thead><tr><th>Feature</th><th>Tipo</th><th>Descrição</th><th>Uso</th></tr></thead>
+        <tbody>
+          {% for row in [
+            ('credit_score_current','Numérica','Score de crédito atual (200–1000)','PD'),
+            ('score_change','Numérica','Variação do score desde a originação','PD / Staging'),
+            ('debt_to_income','Numérica','Parcela / Renda mensal (DTI)','PD'),
+            ('ltv_ratio','Numérica','Loan-to-Value: saldo / valor da garantia','PD / LGD'),
+            ('num_delinquencies','Inteira','Nº de inadimplências nos últimos 12 meses','PD'),
+            ('days_past_due','Inteira','Dias em atraso atual (DPD)','PD / Staging'),
+            ('utilization_rate','Numérica','% do limite utilizada (rotativos)','PD / EAD'),
+            ('loan_type','Categórica','Imobiliário, Veículo, Pessoal, Cartão, Empresarial','PD / LGD / EAD'),
+            ('employment_type','Categórica','CLT, CNPJ, Servidor, Autônomo, Aposentado','PD'),
+            ('collateral_value','Numérica','Valor da garantia em R$','LGD'),
+            ('credit_limit','Numérica','Limite total de crédito (rotativos)','EAD'),
+            ('drawn_balance','Numérica','Saldo sacado (rotativos)','EAD'),
+          ] %}
+          <tr>
+            <td><code style="font-family:monospace;font-size:.78rem;">{{ row[0] }}</code></td>
+            <td>{{ row[1] }}</td>
+            <td style="font-size:.82rem;">{{ row[2] }}</td>
+            <td><span style="font-size:.72rem;font-weight:700;color:var(--accent);">{{ row[3] }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── 3. Produto e Default ─────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-pie-chart"></i></span> Composição e Taxa de Default</h2>
+    {% if data.data_available %}
+    <div class="table-responsive">
+      <table class="table-custom">
+        <thead><tr><th>Tipo de Produto</th><th>Contratos</th><th>EAD (R$ M)</th><th>ECL (R$ M)</th><th>Taxa Default</th><th>Cobertura</th></tr></thead>
+        <tbody>
+          {% for p in data.prod_data %}
+          <tr>
+            <td class="fw-600">{{ p.loan_type }}</td>
+            <td>{{ "{:,}".format(p.n|int) }}</td>
+            <td>{{ "%.1f" | format(p.ead / 1e6) }}</td>
+            <td>{{ "%.1f" | format(p.ecl / 1e6) }}</td>
+            <td class="{{ 'metric-bad' if p.dr > 0.10 else ('metric-warn' if p.dr > 0.05 else 'metric-good') }}">
+              {{ "%.1f%%" | format(p.dr * 100) }}
+            </td>
+            <td>{{ "%.1f%%" | format(p.cov) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ── 4. Gráficos ──────────────────────────────────────── -->
+  <div class="row g-4 mb-2">
+    <div class="col-md-6">
+      <div class="chart-container">
+        <div class="chart-title"><i class="fas fa-image me-2"></i>Distribuição do Score de Crédito</div>
+        <img src="/plots/01_score_distribution.png" class="chart-img" alt="Score Distribution" onerror="this.style.display='none';this.nextSibling.style.display='block'">
+        <div style="display:none;color:var(--text-3);font-size:.8rem;padding:2rem;text-align:center;">Execute main.py para gerar os gráficos</div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="chart-container">
+        <div class="chart-title"><i class="fas fa-image me-2"></i>Staging da Carteira</div>
+        <img src="/plots/02_staging.png" class="chart-img" alt="Staging" onerror="this.style.display='none';this.nextSibling.style.display='block'">
+        <div style="display:none;color:var(--text-3);font-size:.8rem;padding:2rem;text-align:center;">Execute main.py para gerar os gráficos</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 5. Staging IFRS 9 ────────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-sitemap"></i></span> Staging da Carteira</h2>
+    <p>Cada contrato foi alocado a um Stage com base nos critérios de ASRC:</p>
+    <div class="formula-box" style="font-size:.82rem;">
+      ASRC = True  SE:  (score_change &lt; -100)  OU
+                        (days_past_due ≥ 30)     OU
+                        (dti > 0.55  E  num_delinq > 0)
+
+      Stage = 3  se default_flag == 1
+      Stage = 2  se ASRC == True  (sem default)
+      Stage = 1  caso contrário
+    </div>
+    {% if data.data_available %}
+    <div class="row g-3 mt-2">
+      {% for s, pct, color, label in [(1, data.kpis.stage1_pct, 'stage1', 'Stage 1'), (2, data.kpis.stage2_pct, 'stage2', 'Stage 2'), (3, data.kpis.stage3_pct, 'stage3', 'Stage 3')] %}
+      <div class="col-md-4">
+        <div style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:1rem;text-align:center;">
+          <div class="stage-badge stage-{{ s }} mb-2">Stage {{ s }}</div>
+          <div style="font-size:1.8rem;font-weight:800;">{{ pct }}%</div>
+          <div style="font-size:.78rem;color:var(--text-2);">da carteira</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ── 6. Segmentação e Pooling ──────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-object-group"></i></span> Segmentação de Carteira e Abordagem Coletiva</h2>
+    <p>
+      O IFRS 9 permite calcular a ECL de forma <strong>coletiva (pooled)</strong> — agrupando contratos
+      com características de risco similares — em vez de individualmente (quando não houver informação
+      suficiente a nível de contrato).
+    </p>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <h3>Critérios de Segmentação</h3>
+        <ul style="font-size:.82rem;color:var(--text-2);">
+          <li><strong>Tipo de produto:</strong> imobiliário, cartão, veículo — risco completamente distinto</li>
+          <li><strong>Vintage (safra):</strong> contratos com mesma data de originação têm comportamento homogêneo</li>
+          <li><strong>Rating / Score:</strong> faixas de PD agrupadas</li>
+          <li><strong>Região geográfica:</strong> concentração por estado, impacto de choques locais</li>
+          <li><strong>Canal de originação:</strong> digital, agência, correspondente bancário</li>
+          <li><strong>Porte do tomador (PF vs PJ):</strong> PME vs Large Corporate</li>
+        </ul>
+      </div>
+      <div class="col-md-6">
+        <h3>Granularidade recomendada</h3>
+        <div class="callout callout-info" style="font-size:.82rem;">
+          <strong>IASB ED/2013/3:</strong> Um segmento deve conter pelo menos
+          <em>30–50 defaults observados</em> para que os parâmetros PD/LGD sejam estatisticamente robustos.
+          Segmentos muito pequenos resultam em alta variância paramétrica.
+        </div>
+        <div class="code-block mt-2" style="font-size:.74rem;">
+<span class="cm"># Segmentação típica no modelo</span>
+df[<span class="st">"segment"</span>] = (
+    df[<span class="st">"loan_type"</span>]
+    + <span class="st">"_"</span>
+    + pd.cut(df[<span class="st">"pd_12m"</span>],
+             bins=[<span class="nm">0</span>,<span class="nm">.02</span>,<span class="nm">.10</span>,<span class="nm">.30</span>,<span class="nm">1</span>],
+             labels=[<span class="st">"low"</span>,<span class="st">"med"</span>,<span class="st">"high"</span>,<span class="st">"vhigh"</span>])
+    .astype(<span class="st">str</span>)
+)
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 7. Vintage Analysis ───────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-calendar-days"></i></span> Análise de Safra (Vintage Analysis)</h2>
+    <p>
+      A <strong>análise de safra</strong> rastreia o comportamento de inadimplência de grupos de contratos
+      originados no mesmo período. É a base para calibrar PDs e entender a qualidade de originação ao longo do tempo.
+    </p>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <div class="formula-box" style="font-size:.8rem;">
+          Curva de Safra: DR(meses_desde_originação)
+
+          DR₁₂ = % contratos em default até o 12º mês
+          DR₂₄ = % contratos em default até o 24º mês
+          Maturação: ponto em que a curva estabiliza
+        </div>
+        <p style="font-size:.83rem;color:var(--text-2);margin-top:.8rem;">
+          Uma safra com DR₁₂ maior que as anteriores sinaliza
+          <strong>deterioração dos critérios de crédito</strong> na originação.
+        </p>
+      </div>
+      <div class="col-md-6">
+        <h3>Taxa de Maturação por Produto</h3>
+        <table class="table-custom" style="font-size:.79rem;">
+          <thead><tr><th>Produto</th><th>Maturação típica</th><th>DR₁₂ benchmark</th></tr></thead>
+          <tbody>
+            <tr><td>Cartão</td><td>18–24 meses</td><td>5–12%</td></tr>
+            <tr><td>Pessoal</td><td>12–18 meses</td><td>3–8%</td></tr>
+            <tr><td>Consignado</td><td>24–36 meses</td><td>0.5–2%</td></tr>
+            <tr><td>Veículo</td><td>18–30 meses</td><td>4–10%</td></tr>
+            <tr><td>Imobiliário</td><td>36–60 meses</td><td>1–4%</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 8. Application Score vs Behavioral Score ──────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-brain"></i></span> Application Score × Behavioral Score</h2>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <h3>Application Score</h3>
+        <p style="font-size:.84rem;color:var(--text-2);">
+          Usado na <strong>originação</strong>: prevê o risco do tomador <em>antes</em> de conceder o crédito.
+          Baseia-se em dados cadastrais e bureau de crédito (Serasa, SCR, etc.).
+        </p>
+        <ul style="font-size:.82rem;color:var(--text-2);">
+          <li>Score bureau (Serasa Experian, SPC)</li>
+          <li>Histórico de consultas de crédito</li>
+          <li>Renda declarada e comprovada</li>
+          <li>Tempo de relacionamento com o banco</li>
+          <li>DTI (dívida / renda)</li>
+        </ul>
+      </div>
+      <div class="col-md-6">
+        <h3>Behavioral Score</h3>
+        <p style="font-size:.84rem;color:var(--text-2);">
+          Usado no <strong>monitoramento contínuo</strong>: reflete o comportamento <em>atual</em> do cliente
+          com base em dados transacionais internos.
+        </p>
+        <ul style="font-size:.82rem;color:var(--text-2);">
+          <li>Padrão de pagamento (dias de atraso)</li>
+          <li>Evolução da utilização do limite</li>
+          <li>Saques no cheque especial frequentemente</li>
+          <li>Volume de transações no débito/crédito</li>
+          <li>Relação saldo/limite ao longo do tempo</li>
+        </ul>
+        <div class="callout callout-success mt-2" style="font-size:.8rem;">
+          <strong>IFRS 9 usa behavioral score</strong> para monitorar SICR —
+          o score application já é histórico; o behavioral é dinâmico.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="takeaways">
+    <h4><i class="fas fa-lightbulb me-2"></i>Principais Aprendizados</h4>
+    <ul>
+      <li>A carteira sintética reproduz relações realistas entre features e risk drivers</li>
+      <li>O staging usa regras de ASRC baseadas em score, DPD e DTI combinados</li>
+      <li>A maior parcela (~60%) fica no Stage 1 — adimplente sem deterioração</li>
+      <li>Crédito Empresarial tem a maior taxa de default; Veículos a menor</li>
+    </ul>
+  </div>
+
+  <div class="module-nav">
+    <a href="/modulo/1"><i class="fas fa-arrow-left"></i> Módulo 1</a>
+    <a href="/modulo/3" class="next-btn">Módulo 3: Modelo de PD <i class="fas fa-arrow-right"></i></a>
+  </div>
+
+</div>
+{% endblock %}

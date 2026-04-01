@@ -1,0 +1,457 @@
+{% extends "base.html" %}
+{% block title %}KPIs de Carteira de Crédito{% endblock %}
+
+{% block content %}
+{% set pk = data.port_kpis %}
+<div class="page-header">
+  <div class="module-badge" style="background:linear-gradient(135deg,#0f172a,#1e40af);">
+    <i class="fas fa-border-all"></i> Carteira
+  </div>
+  <h1>KPIs de Carteira de Crédito</h1>
+  <p class="page-desc">
+    Aging por faixa de atraso × mês de referência, roll rate, eficiência encadeada e concentração de carteira.
+  </p>
+</div>
+
+<div class="page-body">
+
+  <!-- ═══════════════════════ KPI BAR ══════════════════════════════════════ -->
+  {% if data.data_available %}
+  <div class="row g-3 mb-4">
+
+    <!-- IsDelayed -->
+    <div class="col-6 col-md-3">
+      <div class="metric-card metric-bad">
+        <div class="metric-label"><i class="fas fa-clock-rotate-left me-1"></i> IsDelayed</div>
+        <div class="kpi-value danger">{{ pk.is_delayed_pct }}%</div>
+        <div class="metric-sub">{{ "{:,}".format(pk.is_delayed_n | int) }} contratos em atraso</div>
+      </div>
+    </div>
+
+    <!-- Default Rate -->
+    <div class="col-6 col-md-3">
+      <div class="metric-card metric-bad">
+        <div class="metric-label"><i class="fas fa-skull me-1"></i> Default Rate</div>
+        <div class="kpi-value danger">{{ pk.default_rate }}%</div>
+        <div class="metric-sub">Contratos inadimplentes</div>
+      </div>
+    </div>
+
+    <!-- Eficiência Encadeada -->
+    <div class="col-6 col-md-3">
+      <div class="metric-card metric-warn">
+        <div class="metric-label"><i class="fas fa-link me-1"></i> Flow Rate A00</div>
+        <div class="kpi-value warn">{{ pk.efic_encadeada.flow_rate }}%</div>
+        <div class="metric-sub">% saindo de A00 por mês</div>
+      </div>
+    </div>
+
+    <!-- Cure Rate -->
+    <div class="col-6 col-md-3">
+      <div class="metric-card metric-good">
+        <div class="metric-label"><i class="fas fa-heart-pulse me-1"></i> Cure Rate</div>
+        <div class="kpi-value success">{{ pk.efic_encadeada.cure_rate }}%</div>
+        <div class="metric-sub">A01-30 → A00 (cura mensal)</div>
+      </div>
+    </div>
+
+  </div><!-- /kpi bar -->
+
+  <!-- ═══════════════════════ AGING: FAIXA × MÊS ═══════════════════════════ -->
+  <div class="card mb-4">
+    <div class="card-header d-flex align-items-center gap-2">
+      <i class="fas fa-table-cells-large text-primary"></i>
+      <strong>Aging — Faixa de Atraso × Mês de Referência</strong>
+      <span class="badge bg-secondary ms-auto">% do EAD</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-bordered mb-0 aging-matrix">
+          <thead class="table-dark text-center">
+            <tr>
+              <th>Faixa</th>
+              {% for ml in pk.month_labels %}
+              <th>{{ ml }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody class="text-center">
+            {% set dpd_labels = pk.dpd_labels %}
+            {% for bucket in dpd_labels %}
+            <tr>
+              <td class="fw-semibold text-start ps-3">{{ bucket }}</td>
+              {% for ml in pk.month_labels %}
+                {% set ns = namespace(val=0.0) %}
+                {% for r in pk.roll_months %}
+                  {% if r.month_label == ml and r.dpd_bucket == bucket %}
+                    {% set ns.val = r.pct_ead %}
+                  {% endif %}
+                {% endfor %}
+                {% if bucket == 'A00' %}
+                  {% set cell_cls = 'bg-success bg-opacity-25' %}
+                {% elif bucket == 'A01-30' %}
+                  {% set cell_cls = 'bg-warning bg-opacity-25' %}
+                {% elif bucket == 'A31-60' %}
+                  {% set cell_cls = 'bg-warning bg-opacity-50' %}
+                {% elif bucket == 'A61-90' %}
+                  {% set cell_cls = 'bg-danger bg-opacity-25' %}
+                {% elif bucket == 'A91-120' %}
+                  {% set cell_cls = 'bg-danger bg-opacity-50' %}
+                {% else %}
+                  {% set cell_cls = 'bg-danger bg-opacity-75 text-white' %}
+                {% endif %}
+              <td class="{{ cell_cls }}">{{ ns.val }}%</td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════ CHARTS ROW ════════════════════════════════════ -->
+  <div class="row g-4 mb-4">
+
+    <!-- Stacked bar: composição mensal por faixa -->
+    <div class="col-12 col-lg-8">
+      <div class="card h-100">
+        <div class="card-header">
+          <i class="fas fa-chart-bar text-primary me-2"></i>
+          <strong>Evolução da Composição da Carteira por Faixa</strong>
+        </div>
+        <div class="card-body">
+          <canvas id="chartAging" style="max-height:320px;"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Line: flow rate mensal -->
+    <div class="col-12 col-lg-4">
+      <div class="card h-100">
+        <div class="card-header">
+          <i class="fas fa-chart-line text-warning me-2"></i>
+          <strong>Flow Rate Mensal (% saindo A00)</strong>
+        </div>
+        <div class="card-body">
+          <canvas id="chartFlowRate" style="max-height:320px;"></canvas>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════ ROLL RATE MATRIX ═════════════════════════════ -->
+  <div class="card mb-4">
+    <div class="card-header d-flex align-items-center gap-2">
+      <i class="fas fa-shuffle text-primary"></i>
+      <strong>Matriz de Roll Rate por Faixa de Atraso</strong>
+      <span class="badge bg-secondary ms-auto">Transição mensal (%)</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-bordered mb-0 text-center roll-matrix-tbl">
+          <thead class="table-dark">
+            <tr>
+              <th>De \ Para</th>
+              {% for b in pk.dpd_labels %}<th>{{ b }}</th>{% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in pk.roll_matrix %}
+            <tr>
+              <td class="fw-semibold text-start ps-3">{{ row.bucket_from }}
+                <small class="text-muted">({{ row.prev_pct }}%)</small>
+              </td>
+              {% for b in pk.dpd_labels %}
+                {% set val = row[b] %}
+                {% if loop.index0 == loop.index0 %}
+                  {# diagonal highlight #}
+                {% endif %}
+                {% if val >= 50 %}
+                  {% set cls = 'table-success fw-bold' %}
+                {% elif val >= 20 %}
+                  {% set cls = 'table-warning' %}
+                {% elif val >= 5 %}
+                  {% set cls = '' %}
+                {% else %}
+                  {% set cls = 'text-muted' %}
+                {% endif %}
+              <td class="{{ cls }}">{{ val }}%</td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════ FAIXA ATUAL + ISDELAYED POR PRODUTO ══════════ -->
+  <div class="row g-4 mb-4">
+
+    <!-- Faixa atual (distribuição snapshot) -->
+    <div class="col-12 col-lg-6">
+      <div class="card h-100">
+        <div class="card-header">
+          <i class="fas fa-chart-pie text-info me-2"></i>
+          <strong>Distribuição Atual por Faixa de Atraso</strong>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-sm mb-0 text-center">
+            <thead class="table-secondary">
+              <tr>
+                <th class="text-start ps-3">Faixa</th>
+                <th># Contratos</th>
+                <th>% Qtd</th>
+                <th>EAD (M)</th>
+                <th>% EAD</th>
+                <th>DR %</th>
+                <th>Cobertura</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in pk.faixa_atraso %}
+              <tr>
+                <td class="text-start ps-3 fw-semibold">{{ r.dpd_bucket }}</td>
+                <td>{{ r.n | int }}</td>
+                <td>{{ r.pct_n }}%</td>
+                <td>R$ {{ r.ead_M }}M</td>
+                <td>{{ r.pct_ead }}%</td>
+                <td>{{ r.dr_pct }}%</td>
+                <td>{{ r.cov }}%</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- IsDelayed por produto -->
+    <div class="col-12 col-lg-6">
+      <div class="card h-100">
+        <div class="card-header">
+          <i class="fas fa-tags text-warning me-2"></i>
+          <strong>IsDelayed por Produto</strong>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-sm mb-0 text-center">
+            <thead class="table-secondary">
+              <tr>
+                <th class="text-start ps-3">Produto</th>
+                <th>Total</th>
+                <th>Em Atraso</th>
+                <th>% Atraso</th>
+                <th>Default %</th>
+                <th>EAD (M)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p in pk.delayed_prod %}
+              <tr>
+                <td class="text-start ps-3 fw-semibold">{{ p.loan_type }}</td>
+                <td>{{ p.n }}</td>
+                <td>{{ p.delayed }}</td>
+                <td class="{% if p.delayed_pct > 30 %}text-danger{% elif p.delayed_pct > 15 %}text-warning{% else %}text-success{% endif %} fw-semibold">
+                  {{ p.delayed_pct }}%
+                </td>
+                <td>{{ p.default_pct }}%</td>
+                <td>R$ {{ (p.ead / 1e6) | round(2) }}M</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════ EFIC DIAGONAL + HHI ════════════════════════ -->
+  <div class="row g-4 mb-4">
+
+    <!-- Eficiência Diagonal -->
+    <div class="col-12 col-lg-6">
+      <div class="card h-100">
+        <div class="card-header">
+          <i class="fas fa-bullseye text-success me-2"></i>
+          <strong>Eficiência Diagonal (Permanência na Faixa)</strong>
+        </div>
+        <div class="card-body">
+          {% for ed in pk.efic_diagonal %}
+          <div class="d-flex align-items-center mb-2 gap-2">
+            <span class="badge bg-secondary" style="min-width:90px;">{{ ed.bucket }}</span>
+            <div class="progress flex-grow-1" style="height:18px;">
+              <div class="progress-bar
+                {% if ed.pct > 60 %}bg-success{% elif ed.pct > 30 %}bg-warning{% else %}bg-danger{% endif %}"
+                   style="width:{{ ed.pct }}%;">
+                {{ ed.pct }}%
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- HHI + Concentração -->
+    <div class="col-12 col-lg-6">
+      <div class="card h-100">
+        <div class="card-header">
+          <i class="fas fa-chart-pie text-primary me-2"></i>
+          <strong>Concentração de Carteira (HHI)</strong>
+        </div>
+        <div class="card-body d-flex flex-column align-items-center justify-content-center">
+          <canvas id="chartHHI" style="max-height:200px; max-width:200px;"></canvas>
+          <div class="mt-3 text-center">
+            <div class="fs-4 fw-bold
+              {% if pk.hhi > 2500 %}text-danger{% elif pk.hhi > 1500 %}text-warning{% else %}text-success{% endif %}">
+              HHI = {{ pk.hhi | int }}
+            </div>
+            <small class="text-muted">
+              {% if pk.hhi > 2500 %}Alta concentração (> 2500)
+              {% elif pk.hhi > 1500 %}Concentração moderada (1500–2500)
+              {% else %}Carteira diversificada (&lt; 1500)
+              {% endif %}
+            </small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  {% else %}
+  <div class="alert alert-warning">
+    <i class="fas fa-triangle-exclamation me-2"></i>
+    Dados da carteira não disponíveis. Execute <code>python main.py</code> para gerar os dados.
+  </div>
+  {% endif %}
+
+</div><!-- /page-body -->
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* ─── dados do template ─────────────────────────────────────────────────── */
+const ROLL_MONTHS  = {{ data.port_kpis.roll_months | tojson }};
+const DPD_LABELS   = {{ data.port_kpis.dpd_labels  | tojson }};
+const MONTH_LABELS = {{ data.port_kpis.month_labels | tojson }};
+const DELAYED_PROD = {{ data.port_kpis.delayed_prod | tojson }};
+
+/* ─── cores por faixa ───────────────────────────────────────────────────── */
+const DPD_COLORS = {
+  'A00':     'rgba( 34,197, 94, 0.75)',
+  'A01-30':  'rgba(234,179,  8, 0.75)',
+  'A31-60':  'rgba(249,115, 22, 0.75)',
+  'A61-90':  'rgba(239, 68, 68, 0.65)',
+  'A91-120': 'rgba(185, 28, 28, 0.75)',
+  'A120+':   'rgba( 76,  5,  5, 0.85)',
+};
+
+/* ─── helper: montar datasets por faixa ────────────────────────────────── */
+function buildAgingDatasets(field) {          // field = 'pct_ead' | 'pct_n'
+  return DPD_LABELS.map(bucket => ({
+    label: bucket,
+    data: MONTH_LABELS.map(ml => {
+      const rec = ROLL_MONTHS.find(r => r.month_label === ml && r.dpd_bucket === bucket);
+      return rec ? rec[field] : 0;
+    }),
+    backgroundColor: DPD_COLORS[bucket],
+    borderWidth: 0,
+  }));
+}
+
+/* ─── 1. Stacked bar — composição mensal ───────────────────────────────── */
+new Chart(document.getElementById('chartAging'), {
+  type: 'bar',
+  data: {
+    labels: MONTH_LABELS,
+    datasets: buildAgingDatasets('pct_ead'),
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'bottom' },
+      tooltip: {
+        callbacks: {
+          label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}%`,
+        },
+      },
+    },
+    scales: {
+      x: { stacked: true },
+      y: { stacked: true, max: 100,
+           ticks: { callback: v => v + '%' } },
+    },
+  },
+});
+
+/* ─── 2. Flow Rate Line — % saindo de A00 a cada mês ─────────────────── */
+const flowData = MONTH_LABELS.map(ml => {
+  const a00 = ROLL_MONTHS.find(r => r.month_label === ml && r.dpd_bucket === 'A00');
+  return a00 ? parseFloat((100 - a00.pct_ead).toFixed(1)) : 0;
+});
+
+new Chart(document.getElementById('chartFlowRate'), {
+  type: 'line',
+  data: {
+    labels: MONTH_LABELS,
+    datasets: [{
+      label: '% fora de A00',
+      data: flowData,
+      borderColor: 'rgba(239,68,68,0.9)',
+      backgroundColor: 'rgba(239,68,68,0.15)',
+      fill: true,
+      tension: 0.35,
+      pointRadius: 4,
+    }],
+  },
+  options: {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { ticks: { callback: v => v + '%' } },
+    },
+  },
+});
+
+/* ─── 3. HHI Donut ─────────────────────────────────────────────────────── */
+const hhiProd = DELAYED_PROD.map(p => p.ead);
+const hhiLabs = DELAYED_PROD.map(p => p.loan_type);
+new Chart(document.getElementById('chartHHI'), {
+  type: 'doughnut',
+  data: {
+    labels: hhiLabs,
+    datasets: [{
+      data: hhiProd,
+      backgroundColor: [
+        'rgba( 59,130,246,0.8)',
+        'rgba( 16,185,129,0.8)',
+        'rgba(245,158, 11,0.8)',
+        'rgba(239, 68, 68,0.8)',
+        'rgba(139, 92,246,0.8)',
+      ],
+      borderWidth: 1,
+    }],
+  },
+  options: {
+    responsive: true,
+    cutout: '65%',
+    plugins: {
+      legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } },
+      tooltip: {
+        callbacks: {
+          label: ctx => {
+            const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+            const pct = total > 0 ? ((ctx.parsed / total) * 100).toFixed(1) : 0;
+            return ` ${ctx.label}: ${pct}%`;
+          },
+        },
+      },
+    },
+  },
+});
+</script>
+{% endblock %}

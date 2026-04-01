@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+{% block title %}Módulo 7 — Stress Testing{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="module-badge"><i class="fas fa-triangle-exclamation"></i> Módulo 7 de 8</div>
+  <h1>Stress Testing — Análise de Sensibilidade</h1>
+  <p class="page-desc">Como a ECL reage a choques nos parâmetros? Cenários adversos, análise de sensibilidade e implicações regulatórias.</p>
+</div>
+
+<div class="page-body">
+  <!-- ── Objetivos de Aprendizagem ────────────────────────── -->
+  <div class="objectives-block">
+    <div class="objectives-header"><i class="fas fa-bullseye"></i> Objetivos de Aprendizagem</div>
+    <div class="objectives-body">
+      <ul>
+        <li>Aplicar stress testing via multiplicadores de PD e LGD sobre a ECL base</li>
+        <li>Interpretar heatmaps de sensibilidade e identificar o parâmetro mais crítico</li>
+        <li>Distinguir análise de sensibilidade, cenário narrativo e Monte Carlo</li>
+        <li>Entender as diferenças entre cenários IFRS 9 e o stress test regulatório (ICAAP)</li>
+        <li>Aplicar reverse stress test para identificar o ponto de falha do banco</li>
+        <li>Conhecer a abordagem de risco climático (NGFS) e o programa BCB-PARES</li>
+      </ul>
+    </div>
+  </div>
+  <!-- ── 1. O que é Stress Test? ─────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-bolt"></i></span> O que é o Stress Testing?</h2>
+    <p>
+      O <strong>stress testing</strong> de ECL consiste em aplicar choques deliberados nos parâmetros
+      de risco — PD, LGD, EAD — para entender a <em>sensibilidade das provisões</em> a cenários
+      adversos. É diferente de modelos de projeção macroeconômica; o objetivo aqui é avaliar
+      a robustez do balanço contra eventos extremos mas plausíveis.
+    </p>
+    <div class="row g-3 mt-2">
+      {% for title, icon, color, desc in [
+        ('Por que fazer?','fas fa-question','#3b82f6','Reguladores exigem evidência de resiliência financeira (Basileia III, CCAR, DFAST, ICAAP).'),
+        ('O que estressar?','fas fa-wrench','#f59e0b','Multiplicadores nos parâmetros PD e LGD — sem precisar refazer todos os modelos.'),
+        ('Como interpretar?','fas fa-eye','#8b5cf6','O Δ% na ECL revela qual parâmetro é mais sensível e quais segmentos amplificam o risco.'),
+      ] %}
+      <div class="col-md-4">
+        <div class="kpi-card" style="border-top:4px solid {{ color }};">
+          <div class="kpi-label"><i class="{{ icon }} me-1"></i>{{ title }}</div>
+          <p style="font-size:.8rem;color:#64748b;margin-top:.5rem;">{{ desc }}</p>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ── 2. Metodologia ──────────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-cogs"></i></span> Nossa Abordagem: Multiplicadores</h2>
+    <p>
+      Para cada cenário, aplicamos multiplicadores <code>k_pd</code> e <code>k_lgd</code>
+      sobre os parâmetros base e calculamos a nova ECL total:
+    </p>
+    <div class="formula-box">
+      $$ECL_{\text{stress}} = \sum_i PD_i \cdot k_{PD} \cdot LGD_i \cdot k_{LGD} \cdot EAD_i \cdot DF_i$$
+
+      Δ ECL (%) = (ECL_stress - ECL_base) / ECL_base × 100
+    </div>
+    <div class="code-block mt-3">
+<span class="cm"># Grade de cenários: produto cartesiano de multiplicadores</span>
+pd_mults  = [<span class="nm">1.0</span>, <span class="nm">1.25</span>, <span class="nm">1.5</span>, <span class="nm">1.75</span>, <span class="nm">2.0</span>]
+lgd_mults = [<span class="nm">1.0</span>, <span class="nm">1.1</span>, <span class="nm">1.2</span>, <span class="nm">1.3</span>, <span class="nm">1.4</span>]
+
+results = []
+<span class="kw">for</span> k_pd <span class="kw">in</span> pd_mults:
+    <span class="kw">for</span> k_lgd <span class="kw">in</span> lgd_mults:
+        df_s = df.copy()
+        df_s[<span class="st">"pd_stress"</span>] = (df[<span class="st">"pd_12m"</span>] * k_pd).clip(<span class="nm">0</span>, <span class="nm">1</span>)
+        df_s[<span class="st">"lgd_stress"</span>] = (df[<span class="st">"lgd_pred"</span>] * k_lgd).clip(<span class="nm">0</span>, <span class="nm">1</span>)
+        ecl_s = (df_s[<span class="st">"pd_stress"</span>] * df_s[<span class="st">"lgd_stress"</span>]
+                 * df_s[<span class="st">"ead_pred"</span>]).sum()
+        results.append({<span class="st">"k_pd"</span>: k_pd, <span class="st">"k_lgd"</span>: k_lgd,
+                         <span class="st">"ecl_stress"</span>: ecl_s})
+    </div>
+  </div>
+
+  <!-- ── 3. Resultados ───────────────────────────────────── -->
+  {% if data.data_available and data.stress_data %}
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-table"></i></span> Resultados (Amostra de Cenários)</h2>
+    <div class="table-responsive">
+      <table class="table-custom">
+        <thead>
+          <tr>
+            <th>k_PD</th><th>k_LGD</th>
+            <th>ECL Estressada</th><th>Δ ECL (%)</th>
+            <th>Cenário</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in data.stress_data[:15] %}
+          {% set delta = row.delta_pct if row.delta_pct is defined else 0 %}
+          {% set abs_delta = delta|abs %}
+          <tr>
+            <td>{{ "%.2f"|format(row.pd_multiplier) }}×</td>
+            <td>{{ "%.2f"|format(row.lgd_multiplier) }}×</td>
+            <td class="fw-600">R${{ "%.1f"|format(row.ecl_stress/1e6) }}M</td>
+            <td class="{{ 'metric-danger' if abs_delta > 50 else ('metric-warn' if abs_delta > 20 else 'metric-good') }}">
+              {% if delta > 0 %}+{% endif %}{{ "%.1f"|format(delta) }}%
+            </td>
+            <td style="font-size:.8rem;">
+              {% if row.pd_multiplier == 1.0 and row.lgd_multiplier == 1.0 %}
+                <span class="badge bg-secondary">Base</span>
+              {% elif row.pd_multiplier >= 2.0 and row.lgd_multiplier >= 1.4 %}
+                <span class="badge" style="background:#dc2626;">Severo</span>
+              {% elif row.pd_multiplier >= 1.5 or row.lgd_multiplier >= 1.3 %}
+                <span class="badge" style="background:#ea580c;">Adverso</span>
+              {% else %}
+                <span class="badge" style="background:#2563eb;">Suave</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ── Chart ──────────────────────────────────────────── -->
+  <div class="chart-container mb-4">
+    <div class="chart-title"><i class="fas fa-image me-2"></i>Heatmap de Sensibilidade da ECL (k_PD × k_LGD)</div>
+    <img src="/plots/09_sensitivity.png" class="chart-img" alt="Stress Test" onerror="this.style.display='none'">
+  </div>
+
+  <!-- ── 4. Interpretação ────────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-magnifying-glass-chart"></i></span> Interpretação Regulatória</h2>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <h3>O que observar no heatmap</h3>
+        <ul style="font-size:.86rem;color:#475569;line-height:1.8;">
+          <li>Cor mais escura = ECL mais alta relativa ao cenário base</li>
+          <li>Gradiente por linha: sensibilidade ao LGD</li>
+          <li>Gradiente por coluna: sensibilidade ao PD</li>
+          <li>Canto superior direito = cenário mais severo</li>
+          <li>Não-linearidade: PD × LGD é multiplicativo, logo o impacto combinado é maior que a soma</li>
+        </ul>
+      </div>
+      <div class="col-md-6">
+        <h3>Perguntas que o stress test responde</h3>
+        <div class="callout callout-info" style="font-size:.83rem;">
+          <strong>1. Capital buffer:</strong> "Se a PD dobrar, quantos BRL a mais de provisão preciso constituir?"
+          <br><br>
+          <strong>2. Sensitividade dominante:</strong> "A ECL reage mais a PD ou a LGD?"
+          <br><br>
+          <strong>3. Buffer de conservação:</strong> "O capital de nível 1 suporta o cenário severo?"
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 5. Cenários IFRS 9 vs Stress Test Regulatório ─────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-diagram-project"></i></span> Cenários IFRS 9 × Stress Test Regulatório (ICAAP)</h2>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <h3>Cenários IFRS 9 (para ECL)</h3>
+        <p style="font-size:.84rem;color:var(--text-2);">
+          Usados para calcular a provisão contábil. São cenários <em>prospectivos
+          probabilisticamente ponderados</em> (não são cenários adversos únicos).
+        </p>
+        <table class="table-custom" style="font-size:.79rem;">
+          <thead><tr><th>Cenário</th><th>Peso típico</th><th>Propósito</th></tr></thead>
+          <tbody>
+            <tr><td>Base</td><td>50%</td><td>Estimativa central do macro</td></tr>
+            <tr><td>Otimista</td><td>25%</td><td>Upside do ciclo econômico</td></tr>
+            <tr><td>Adverso</td><td>20%</td><td>Risco de deterioração relevante</td></tr>
+            <tr><td>Severo</td><td>5%</td><td>Tail risk — baixa probabilidade, alto impacto</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="col-md-6">
+        <h3>Stress Test Regulatório (ICAAP/SREP)</h3>
+        <p style="font-size:.84rem;color:var(--text-2);">
+          Exigido pelo BCB (Resolução BCB 265/2022) e pelo SSM europeu. Usa <em>cenários
+          adversos únicos</em> para quantificar a necessidade de capital adicional.
+        </p>
+        <ul style="font-size:.82rem;color:var(--text-2);">
+          <li><strong>Horizonte:</strong> 3 anos (vs IFRS 9 de 12m/lifetime)</li>
+          <li><strong>Objetivo:</strong> manutenção de CET1 ≥ mínimo regulatório</li>
+          <li><strong>Inputs:</strong> cenário macroeconômico severo definido pelo regulador</li>
+          <li><strong>Output:</strong> capital shortfall e plano de contingência</li>
+        </ul>
+        <div class="callout callout-info mt-2" style="font-size:.8rem;">
+          <strong>Diferença-chave:</strong> IFRS 9 pondera múltiplos cenários (ECL = média ponderada);
+          ICAAP usa o pior cenário plausível para teste de resistência de capital.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 6. Reverse Stress Test ────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-magnifying-glass-arrow-right"></i></span> Reverse Stress Test</h2>
+    <p>
+      Ao contrário do stress test convencional ("se o PIB cair X%, qual a perda?"),
+      o <strong>reverse stress test</strong> parte do resultado e pergunta:
+      <em>"Que choque causaria insolvência?"</em>
+    </p>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <div class="formula-box" style="font-size:.8rem;">
+          Questão forward: Dado k_PD = 2.0, qual ΔECL?
+
+          Questão reverse:
+          Qual k_PD causa ECL = Capital Tier 1?
+
+          $$k_{PD}^* = \frac{\text{Capital Tier 1}}{\sum_i LGD_i \times EAD_i \times PD_i}$$
+        </div>
+      </div>
+      <div class="col-md-6">
+        <p style="font-size:.84rem;color:var(--text-2);">
+          <strong>Usos do Reverse Stress Test:</strong>
+        </p>
+        <ul style="font-size:.82rem;color:var(--text-2);">
+          <li>Identificar o <em>ponto de falha</em> do banco — quão distante estamos?</li>
+          <li>Revelar concentrações ocultas (um único produto pode ser o gatilho)</li>
+          <li>Exigido pelo SSM, PRA e BCB em supervisão avançada</li>
+          <li>Útil para comunicar ao board e comitê de risco</li>
+        </ul>
+        <div class="callout callout-warn mt-2" style="font-size:.8rem;">
+          O reverse stress test <strong>não precisa ser plausível</strong> — é deliberadamente extremo.
+          O valor está em identificar a trajetória de colapso, não em atribuir probabilidade.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 7. Stress Climático / ESG ─────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-leaf"></i></span> Stress Climático e Risco ESG</h2>
+    <p>
+      O <strong>risco climático</strong> é a fronteira mais recente do stress testing de crédito.
+      O BCB incluiu no <em>Programa de Avaliação de Risco Ambiental (PARES)</em> e o NGFS
+      (Network for Greening the Financial System) publicou cenários padronizados.
+    </p>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <h3>Dois tipos de risco climático</h3>
+        <table class="table-custom" style="font-size:.79rem;">
+          <thead><tr><th>Tipo</th><th>Descrição</th><th>Impacto na ECL</th></tr></thead>
+          <tbody>
+            <tr><td class="fw-600">Físico</td><td>Eventos extremos, inundações, secas</td><td>LGD↑ (garantias imobiliárias em áreas de risco), PD↑ de agro</td></tr>
+            <tr><td class="fw-600">Transição</td><td>Mudanças regulatórias, stranded assets, carbon tax</td><td>PD↑ em setores intensivos em carbono (aço, cimento, aviação)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="col-md-6">
+        <h3>Cenários NGFS para bancos</h3>
+        <ul style="font-size:.82rem;color:var(--text-2);">
+          <li><strong>Orderly Transition:</strong> Políticas climáticas graduais — risco de transição elevado, físico baixo</li>
+          <li><strong>Disorderly Transition:</strong> Choque abrupto de políticas — risco de transição alto e súbito</li>
+          <li><strong>Hot House World:</strong> Sem ação climática — risco físico severo a longo prazo</li>
+        </ul>
+        <div class="callout callout-info mt-2" style="font-size:.8rem;">
+          <strong>BCB — PARES:</strong> A partir de 2025, grandes bancos brasileiros devem
+          demonstrar gestão de riscos ESG e capacidade de stress test climático em seu ICAAP.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 8. Sensibilidade vs Cenário vs Monte Carlo ─────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-dice"></i></span> Análise de Sensibilidade × Cenário × Monte Carlo</h2>
+    <div class="row g-4">
+      <div class="col-md-4">
+        <div class="kpi-card" style="border-top:4px solid #3b82f6;">
+          <div class="kpi-label"><i class="fas fa-sliders me-1"></i>Sensibilidade</div>
+          <p style="font-size:.8rem;color:var(--text-2);margin:.5rem 0;">
+            Varia <em>um parâmetro por vez</em> (ceteris paribus).
+            Responde: "Qual o impacto de +10% no LGD?"
+          </p>
+          <div style="font-size:.76rem;color:#64748b;">
+            ✓ Simples e interpretável<br>
+            ✗ Não captura correlação entre fatores
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="kpi-card" style="border-top:4px solid #f59e0b;">
+          <div class="kpi-label"><i class="fas fa-film me-1"></i>Análise de Cenário</div>
+          <p style="font-size:.8rem;color:var(--text-2);margin:.5rem 0;">
+            Combina múltiplos parâmetros num <em>cenário narrativo coerente</em>
+            (ex: recessão = PD×1.5 + LGD×1.2 + PIB−2%).
+          </p>
+          <div style="font-size:.76rem;color:#64748b;">
+            ✓ Realista e narrativo<br>
+            ✗ Número limitado de cenários testados
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="kpi-card" style="border-top:4px solid #8b5cf6;">
+          <div class="kpi-label"><i class="fas fa-dice me-1"></i>Monte Carlo</div>
+          <p style="font-size:.8rem;color:var(--text-2);margin:.5rem 0;">
+            Simula milhares de combinações aleatórias de parâmetros com <em>distribuição
+            de probabilidades</em>. Gera distribuição da ECL (VaR de provisão).
+          </p>
+          <div style="font-size:.76rem;color:#64748b;">
+            ✓ Distribuição completa de perdas<br>
+            ✗ Custoso computacionalmente
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="formula-box mt-3" style="font-size:.8rem;">
+      ECL_VaR(99%) = percentil 99 da distribuição de ECL simulada via Monte Carlo
+
+      Economic Capital = ECL_VaR(99.9%) − ECL_Esperada
+    </div>
+  </div>
+
+  <div class="takeaways">
+    <h4><i class="fas fa-lightbulb me-2"></i>Principais Aprendizados</h4>
+    <ul>
+      <li>Stress testing de ECL ≠ projeção macro; é uma análise de sensibilidade paramétrica</li>
+      <li>Multiplicadores de PD têm impacto proporcional ao LGD médio da carteira (e vice-versa)</li>
+      <li>O "cliff" de Stage é o maior risco oculto: classificar mais contratos em Stage 2 aumenta ECL desproporcio­nalmente</li>
+      <li>Basileia III exige que o capital absorva o pior cenário "adverso" (não apenas o base)</li>
+      <li>Stress tests devem ser narrativos: o cenário precisa de storyline (recessão, crise setorial, etc.)</li>
+    </ul>
+  </div>
+
+  <div class="module-nav">
+    <a href="/modulo/6"><i class="fas fa-arrow-left"></i> Módulo 6</a>
+    <a href="/modulo/8" class="next-btn">Módulo 8: Produção e Governança <i class="fas fa-arrow-right"></i></a>
+  </div>
+
+</div>
+{% endblock %}

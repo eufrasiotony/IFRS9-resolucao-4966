@@ -1,0 +1,370 @@
+{% extends "base.html" %}
+{% block title %}Módulo 1 — Introdução ao IFRS 9{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="module-badge"><i class="fas fa-book-open"></i> Módulo 1 de 8</div>
+  <h1>Introdução ao IFRS 9</h1>
+  <p class="page-desc">Contexto histórico, o paradigma da perda esperada, os três estágios e a fórmula da ECL.</p>
+</div>
+
+<div class="page-body">
+
+  <!-- ── Objetivos de Aprendizagem ────────────────────────── -->
+  <div class="objectives-block">
+    <div class="objectives-header"><i class="fas fa-bullseye"></i> Objetivos de Aprendizagem</div>
+    <div class="objectives-body">
+      <ul>
+        <li>Entender por que o IFRS 9 substituiu o IAS 39 e o problema do <em>incurred loss</em></li>
+        <li>Compreender os três estágios do modelo de perdas esperadas</li>
+        <li>Calcular uma ECL básica com a fórmula PD × LGD × EAD × DF</li>
+        <li>Distinguir as exigências do IFRS 9 das regras de capital de Basileia III</li>
+        <li>Entender o conceito de <em>forward-looking</em> e informação prospectiva</li>
+        <li>Identificar os principais requisitos de divulgação da IFRS 7</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ── 1. Por que o IFRS 9? ─────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-landmark"></i></span> Por que o IFRS 9 foi criado?</h2>
+    <p>
+      Durante a crise financeira global de <strong>2008</strong>, ficou evidente que o padrão contábil vigente —
+      o <strong>IAS 39</strong> — reconhecia provisões de crédito muito tarde.
+      Bancos só provisionavam quando o default já havia ocorrido (<em>incurred loss model</em>),
+      o que mascarava riscos acumulados por anos.
+    </p>
+    <p>
+      O G20 e o Financial Stability Board pressionaram o IASB a reformar o modelo de provisão.
+      Em julho de 2014, o IASB publicou o <strong>IFRS 9 — Financial Instruments</strong>,
+      com vigência a partir de 1º de janeiro de <strong>2018</strong>.
+      No Brasil, o equivalente é o <strong>CPC 48</strong>, adotado na mesma data.
+    </p>
+
+    <div class="row g-3 mt-1">
+      <div class="col-md-6">
+        <div style="background:#fff1f2;border:1px solid #fecdd3;border-radius:8px;padding:1.1rem;">
+          <div style="font-weight:700;font-size:.85rem;color:#9f1239;margin-bottom:.5rem;"><i class="fas fa-times-circle me-2"></i>IAS 39 — Perda Incorrida</div>
+          <ul style="font-size:.83rem;color:#991b1b;margin:0;padding-left:1.2rem;line-height:1.9;">
+            <li>Provisionava <em>após</em> o evento de perda</li>
+            <li>Atrasava o reconhecimento do risco</li>
+            <li>Não era forward-looking</li>
+            <li>Gerava "cliff effects" nas transições</li>
+          </ul>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:1.1rem;">
+          <div style="font-weight:700;font-size:.85rem;color:#166534;margin-bottom:.5rem;"><i class="fas fa-check-circle me-2"></i>IFRS 9 — Perda Esperada</div>
+          <ul style="font-size:.83rem;color:#15803d;margin:0;padding-left:1.2rem;line-height:1.9;">
+            <li>Provisionamento <em>prospectivo</em> (forward-looking)</li>
+            <li>Incorpora informações macroeconômicas</li>
+            <li>Reconhecimento imediato ao originar o ativo</li>
+            <li>Reflete cenários múltiplos</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 2. Os Três Estágios ───────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-layer-group"></i></span> Os Três Estágios do IFRS 9</h2>
+    <p>
+      O IFRS 9 classifica cada ativo financeiro em um de três estágios baseado no <strong>Aumento Significativo do Risco de Crédito (ASRC)</strong> desde a originação, determinando o horizonte de cálculo da ECL.
+    </p>
+
+    <div class="table-responsive mt-2">
+      <table class="table-custom">
+        <thead><tr>
+          <th>Estágio</th><th>Descrição</th><th>Critério</th><th>ECL Provisionada</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td><span class="stage-badge stage-1"><i class="fas fa-circle fa-xs"></i>Stage 1</span></td>
+            <td>Sem ASRC desde a originação</td>
+            <td>Score estável, sem atraso significativo</td>
+            <td class="metric-good">ECL 12 meses</td>
+          </tr>
+          <tr>
+            <td><span class="stage-badge stage-2"><i class="fas fa-circle fa-xs"></i>Stage 2</span></td>
+            <td>Com ASRC mas sem default</td>
+            <td>Queda &gt;100pts no score, DPD ≥ 30d</td>
+            <td class="metric-warn">ECL Lifetime (vitalício)</td>
+          </tr>
+          <tr>
+            <td><span class="stage-badge stage-3"><i class="fas fa-circle fa-xs"></i>Stage 3</span></td>
+            <td>Crédito deteriorado / em default</td>
+            <td>DPD ≥ 90d, reestruturação, sinais objetivos</td>
+            <td class="metric-bad">ECL Lifetime (PD = 100%)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Stage migration diagram (CSS only) -->
+    <div class="d-flex align-items-center justify-content-center gap-2 mt-3 flex-wrap" style="font-size:.82rem;">
+      <div style="background:#dcfce7;color:#166534;padding:.5rem 1rem;border-radius:20px;font-weight:600;">Stage 1<br><small>ECL 12m</small></div>
+      <div style="color:#64748b;">→ ASRC →</div>
+      <div style="background:#ffedd5;color:#9a3412;padding:.5rem 1rem;border-radius:20px;font-weight:600;">Stage 2<br><small>ECL Lifetime</small></div>
+      <div style="color:#64748b;">→ Default →</div>
+      <div style="background:#fee2e2;color:#991b1b;padding:.5rem 1rem;border-radius:20px;font-weight:600;">Stage 3<br><small>Lifetime (PD=100%)</small></div>
+    </div>
+    <div class="callout callout-info mt-3" style="font-size:.83rem;">
+      <strong>Reversão é possível!</strong>
+      Um ativo pode migrar de volta do Stage 2 para o Stage 1 se o risco se reduzir.
+      Porém, a migração de Stage 3 para Stage 2 só ocorre após cura formal do default.
+    </div>
+  </div>
+
+  <!-- ── 3. A Fórmula da ECL ───────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-calculator"></i></span> A Fórmula da ECL</h2>
+    <p>A <strong>Expected Credit Loss (ECL)</strong> é calculada como o produto de três componentes, descontado a valor presente:</p>
+
+    <div class="formula-box">
+      $$\text{ECL} = \text{PD} \times \text{LGD} \times \text{EAD} \times \underbrace{\frac{1}{(1+r)^t}}_{\text{Fator de Desconto}}$$
+    </div>
+
+    <div class="row g-3 mt-1">
+      {% set components = [
+        ('PD','Probability of Default','Probabilidade de o devedor não honrar suas obrigações no horizonte definido (12 meses para Stage 1, lifetime para Stage 2).','#3b82f6'),
+        ('LGD','Loss Given Default','Percentual da exposição que NÃO será recuperado em caso de default. LGD = 1 − Taxa de Recuperação.','#8b5cf6'),
+        ('EAD','Exposure at Default','Valor da exposição no momento do default. Para créditos rotativos: EAD = sacado + CCF × não-sacado.','#059669'),
+      ] %}
+      {% for code, name, desc, color in components %}
+      <div class="col-md-4">
+        <div style="border:1px solid var(--border);border-top:3px solid {{ color }};border-radius:8px;padding:1rem;">
+          <div style="font-size:1.3rem;font-weight:800;color:{{ color }};margin-bottom:.2rem;">{{ code }}</div>
+          <div style="font-size:.78rem;font-weight:700;color:var(--text-1);margin-bottom:.5rem;">{{ name }}</div>
+          <div style="font-size:.8rem;color:var(--text-2);line-height:1.6;">{{ desc }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <h3>ECL por Estágio</h3>
+    <div class="formula-box">
+      Stage 1:  ECL₁₂ₘ = PD₁₂ₘ × LGD × EAD × DF(1 ano)
+      Stage 2:  ECL_Lᵢfₑ = Σₜ [ PDₘₐᵣg,ₜ × LGD × EAD × DFₜ ]
+      Stage 3:  ECL_Lᵢfₑ = LGD × EAD   (PD = 100%, perda imediata)
+    </div>
+  </div>
+
+  <!-- ── 4. Forward-Looking ────────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-globe"></i></span> Considerações Forward-Looking</h2>
+    <p>
+      Uma das principais inovações do IFRS 9 é exigir que as estimativas de ECL
+      incorporem <strong>informações macroeconômicas prospectivas</strong>.
+    </p>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <h3>Múltiplos Cenários</h3>
+        <p>O banco deve estimar a probabilidade de diferentes cenários econômicos e ponderá-los:</p>
+        <div class="formula-box" style="font-size:.78rem;">
+          ECL = Σ probabilidade(cénario) × ECL(cenário)
+
+          Ex: 50% × ECL(base) + 30% × ECL(otimista) + 20% × ECL(adverso)
+        </div>
+      </div>
+      <div class="col-md-6">
+        <h3>Variáveis Macro Comuns</h3>
+        <ul style="font-size:.85rem;color:var(--text-2);">
+          <li>Crescimento do PIB</li>
+          <li>Taxa de desemprego</li>
+          <li>Taxa SELIC / taxa de juros</li>
+          <li>Índice imobiliário (IGMI-R)</li>
+          <li>Preço de commodities</li>
+        </ul>
+      </div>
+    </div>
+    <div class="callout callout-warn mt-2">
+      <strong><i class="fas fa-triangle-exclamation me-1"></i>Nota sobre este curso</strong>
+      Nosso modelo didático usa Point-in-Time (PIT) sem ajustes macroeconômicos explícitos.
+      Em ambiente de produção, é obrigatório incorporar cenários macro conforme IFRS 9.B5.5.15.
+    </div>
+  </div>
+
+  <!-- ── 5. Escopo do IFRS 9 ──────────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-list-check"></i></span> Escopo do IFRS 9: Quais Instrumentos?</h2>
+    <p>
+      O IFRS 9 se aplica à maioria dos <strong>ativos financeiros</strong> reconhecidos no balanço.
+      A classificação determina a forma de mensuração e se há ou não ECL:
+    </p>
+    <div class="table-responsive">
+      <table class="table-custom">
+        <thead><tr><th>Categoria</th><th>Mensuração</th><th>ECL?</th><th>Exemplos</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="fw-600">Custo Amortizado</td>
+            <td>Amortized Cost</td>
+            <td class="metric-good">Sim — obrigatório</td>
+            <td style="font-size:.8rem;">Empréstimos, financiamentos, títulos mantidos até vencimento</td>
+          </tr>
+          <tr>
+            <td class="fw-600">FVOCI — Débito</td>
+            <td>Fair Value (OCI)</td>
+            <td class="metric-good">Sim — via OCI</td>
+            <td style="font-size:.8rem;">Títulos de dívida classificados como FVOCI</td>
+          </tr>
+          <tr>
+            <td class="fw-600">FVTPL</td>
+            <td>Fair Value (P&amp;L)</td>
+            <td class="metric-warn">Não (marcado a mercado)</td>
+            <td style="font-size:.8rem;">Derivativos, trading book, títulos HfT</td>
+          </tr>
+          <tr>
+            <td class="fw-600">FVOCI — Capital</td>
+            <td>Fair Value (OCI)</td>
+            <td class="metric-warn">Não (FVOCI sem reciclagem)</td>
+            <td style="font-size:.8rem;">Investimentos em ações (opção irrevogável)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout callout-info mt-3" style="font-size:.83rem;">
+      <strong>Fora do escopo do IFRS 9:</strong> investimentos em subsidiárias (IFRS 10),
+      contratos de seguro (IFRS 17), leasing arrendador (IFRS 16 — arrendatário usa IFRS 9 para passivo),
+      e instrumentos de patrimônio próprio.
+    </div>
+  </div>
+
+  <!-- ── 6. IFRS 9 vs Basileia III ────────────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-scale-unbalanced"></i></span> IFRS 9 × Basileia III — Dois Mundos Diferentes</h2>
+    <p>
+      Uma confusão comum: IFRS 9 (contabilidade) e Basileia III (capital regulatório) têm objetivos distintos
+      e modelos de perda <em>diferentes</em>. Um banco é obrigado a obedecer aos dois — mas os números divergem.
+    </p>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <table class="table-custom" style="font-size:.79rem;">
+          <thead><tr><th>Característica</th><th>IFRS 9</th><th>Basileia III (IRB)</th></tr></thead>
+          <tbody>
+            <tr><td>Objetivo</td><td>Provisão contábil (P&amp;L)</td><td>Requerimento de capital</td></tr>
+            <tr><td>PD</td><td>PIT forward-looking</td><td>TTC longa série histórica</td></tr>
+            <tr><td>LGD</td><td>Workout / Downturn</td><td>Downturn obrigatório</td></tr>
+            <tr><td>Horizonte</td><td>12m ou lifetime</td><td>1 ano (sempre)</td></tr>
+            <tr><td>Cenários</td><td>Múltiplos, ponderados</td><td>Conservador único</td></tr>
+            <tr><td>Floor</td><td>Não prescrito</td><td>Floors de PD e LGD (IRB Advanced)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="col-md-6">
+        <h3>Reconciliação IFRS 9 × Basileia</h3>
+        <p style="font-size:.84rem;color:var(--text-2);">
+          O Comitê de Basileia (BCBS 432, 2021) trata da relação entre IFRS 9 e capital regulatório.
+          Em geral:
+        </p>
+        <ul style="font-size:.82rem;color:var(--text-2);">
+          <li><strong>Transitional arrangements:</strong> absorção gradual do impacto da ECL no CET1</li>
+          <li><strong>Excesso de provisão IFRS 9</strong> sobre EL regulatória pode ser reconhecido como Tier 2</li>
+          <li><strong>Déficit</strong> (provisão &lt; EL Basileia) deduz do CET1</li>
+        </ul>
+        <div class="formula-box mt-2" style="font-size:.8rem;">
+          Excess/Deficit = ECL_IFRS9 − EL_Basileia
+          Se &gt; 0: até 0.6% dos RWA pode ir para Tier 2
+          Se &lt; 0: diferença deduz de CET1
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 7. Effective Interest Rate (EIR) ─────────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-percent"></i></span> Effective Interest Rate (EIR) e o Fator de Desconto</h2>
+    <p>
+      O IFRS 9 exige que a ECL seja descontada pela <strong>Taxa de Juros Efetiva (EIR)</strong>
+      — a taxa que iguala o valor presente dos fluxos contratuais ao valor de reconhecimento inicial.
+    </p>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <div class="formula-box" style="font-size:.8rem;">
+          $$\text{EIR} = r \text{ tal que:} \quad V_0 = \sum_{t=1}^{T} \frac{CF_t}{(1+r)^t}$$
+
+          Fator de desconto para o mês t:
+          $$DF_t = \frac{1}{(1 + EIR)^{t/12}}$$
+        </div>
+      </div>
+      <div class="col-md-6">
+        <h3>Impacto do desconto no ECL</h3>
+        <p style="font-size:.84rem;color:var(--text-2);">
+          Para Stage 1 (12 meses), o desconto é pequeno (DF₁₂ ≈ 0.89 com EIR=12% a.a.).
+          Para Stage 2 com tenure de 10 anos, o desconto reduz materialmente o ECL Lifetime:
+        </p>
+        <table class="table-custom" style="font-size:.79rem;">
+          <thead><tr><th>Tenor</th><th>DF (EIR=12%)</th><th>DF (EIR=25%)</th></tr></thead>
+          <tbody>
+            <tr><td>1 ano</td><td>0.893</td><td>0.800</td></tr>
+            <tr><td>3 anos</td><td>0.712</td><td>0.512</td></tr>
+            <tr><td>5 anos</td><td>0.567</td><td>0.328</td></tr>
+            <tr><td>10 anos</td><td>0.322</td><td>0.107</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="callout callout-warn mt-3" style="font-size:.82rem;">
+      <strong>EIR ≠ taxa contratual:</strong> A EIR inclui custos de transação, prêmios/descontos
+      na originação e fees incluídos no cálculo. Para simplificação, muitos bancos usam a taxa nominal
+      contratual + spread médio ou a SELIC como proxy da EIR.
+    </div>
+  </div>
+
+  <!-- ── 8. Apresentação e Disclosure (IFRS 7) ─────────────── -->
+  <div class="theory-section">
+    <h2><span class="section-icon"><i class="fas fa-file-lines"></i></span> Disclosure Obrigatório: IFRS 7</h2>
+    <p>
+      O IFRS 9 em conjunto com o <strong>IFRS 7 — Financial Instruments: Disclosures</strong>
+      exige ampla divulgação nas notas explicativas. Os principais requisitos:
+    </p>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <h3>Tabelas obrigatórias</h3>
+        <ul style="font-size:.82rem;color:var(--text-2);">
+          <li>Abertura da ECL por estágio (Stage 1/2/3) com saldo e provisão</li>
+          <li>Rollforward da provisão: saldo inicial → novas originações → migrações → baixas → saldo final</li>
+          <li>Análise de sensibilidade: impacto de mudanças nas premissas PD/LGD</li>
+          <li>Pesos e premissas dos cenários macroeconômicos</li>
+          <li>Critérios de ASRC utilizados (SICR)</li>
+          <li>Concentrações de risco de crédito</li>
+        </ul>
+      </div>
+      <div class="col-md-6">
+        <h3>Rollforward da ECL (exemplo)</h3>
+        <table class="table-custom" style="font-size:.79rem;">
+          <thead><tr><th>Item</th><th>Stage 1</th><th>Stage 2</th><th>Stage 3</th></tr></thead>
+          <tbody>
+            <tr><td>Saldo inicial</td><td>500</td><td>800</td><td>1.200</td></tr>
+            <tr><td>Novas originações</td><td>+120</td><td>—</td><td>—</td></tr>
+            <tr><td>Migração S1→S2</td><td>−80</td><td>+80</td><td>—</td></tr>
+            <tr><td>Migração S2→S3</td><td>—</td><td>−150</td><td>+150</td></tr>
+            <tr><td>Baixas (write-off)</td><td>—</td><td>—</td><td>−200</td></tr>
+            <tr><td>Remensurações e FX</td><td>+15</td><td>+30</td><td>+40</td></tr>
+            <tr class="fw-600"><td>Saldo final</td><td>555</td><td>760</td><td>1.190</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Takeaways ─────────────────────────────────────────── -->
+  <div class="takeaways">
+    <h4><i class="fas fa-lightbulb me-2"></i>Principais Aprendizados</h4>
+    <ul>
+      <li>O IFRS 9 substituiu o modelo de <em>perda incorrida</em> pelo de <em>perda esperada</em> após a crise de 2008</li>
+      <li>Três estágios definem o horizonte da ECL: Stage 1 (12m), Stage 2 e 3 (lifetime)</li>
+      <li>A migração entre estágios depende do ASRC — Aumento Significativo do Risco de Crédito</li>
+      <li>ECL = PD × LGD × EAD × DF — cada componente requer um modelo específico</li>
+      <li>O padrão exige incorporação de informações forward-looking e cenários macro</li>
+    </ul>
+  </div>
+
+  <div class="module-nav">
+    <a href="/"><i class="fas fa-arrow-left"></i> Início</a>
+    <a href="/modulo/2" class="next-btn">Módulo 2: A Carteira <i class="fas fa-arrow-right"></i></a>
+  </div>
+
+</div>
+{% endblock %}
